@@ -27,6 +27,7 @@
 #include "err_handler.h"
 
 #define BUFSZ	4096
+#define BUFFER	(1024 * 128)	/* 4MB buffer size, more efficient */
 struct dlpart {
 	int	dp_remote;	/* remote server file descriptor */
 	int	dp_local;	/* local file descriptor */
@@ -35,6 +36,8 @@ struct dlpart {
 	char	*dp_url;
 	char	*dp_host;
 };
+
+pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
 
 struct dlinfo {
 	int	di_remote;
@@ -250,7 +253,7 @@ static void download_send_request_head(struct dlinfo *dl)
 static void download_recv_response_head_parsing(struct dlinfo *dl)
 {
 	int n;
-	char buf[BUFSZ], *p;
+	char buf[BUFFER], *p;
 
 	if ((n = read(dl->di_remote, buf, sizeof(buf) - 1)) == -1)
 		err_exit(errno, "read");
@@ -303,7 +306,8 @@ static char *download_prompt_set(const char *file)
 		return prompt;
 }
 
-static void download_progress_print(void)
+static void download_register_alarm_handler(void);
+static void download_progress_print(int signo)
 {
 	int flags = 1;
 	ssize_t speed = bytes_per_sec;
@@ -322,14 +326,20 @@ static void download_progress_print(void)
 			(flags == 4) ? "MB" : "GB",
 			((float)total_read / total) * 100);
 	fflush(stdout);
+	bytes_per_sec = 0;
+	/*download_register_alarm_handler();*/
+	alarm(1);
 }
 
-static void download_signal_handler(int signo)
+static void download_register_alarm_handler(void)
 {
-	download_progress_print();
-	bytes_per_sec = 0;
-	signal(SIGALRM, download_signal_handler);
-	alarm(1);
+	struct sigaction act, old;
+
+	memset(&act, 0, sizeof(act));
+	act.sa_flags |= SA_RESTART;
+	act.sa_handler = download_progress_print;
+	if (sigaction(SIGALRM, &act, &old) == -1)
+		err_exit(errno, "sigaction");
 }
 
 /*
@@ -355,7 +365,7 @@ static void download_thread_header_parsing(struct dlpart *dp)
 	int is_header = 1;
 	ssize_t n;
 	char *data, *p, *ep;
-	char buf[BUFSZ];
+	char buf[BUFFER];
 
 	while (is_header) {
 		if ((n = read(dp->dp_remote, buf, sizeof(buf) - 1)) == -1)
@@ -394,8 +404,9 @@ static void download_thread_header_parsing(struct dlpart *dp)
  */
 static void *download_thread(void *arg)
 {
+	int s;
 	ssize_t n;
-	char buf[BUFSZ];
+	char buf[BUFFER];
 	struct dlpart *dp = (struct dlpart *)arg;
 
 	download_thread_send_request(dp);
@@ -404,11 +415,17 @@ static void *download_thread(void *arg)
 	while (dp->dp_start < dp->dp_end) {
 		if ((n = read(dp->dp_remote, buf, sizeof(buf) - 1)) == -1)
 			err_exit(errno, "read");
+		if ((s = pthread_mutex_lock(&mutex)) != 0)
+			err_msg(s, "pthread_mutex_lock");
 
 		npwrite(dp->dp_local, buf, n, dp->dp_start);
 		total_read += n;
 		dp->dp_start += n;
 		bytes_per_sec += n;
+
+		if ((s = pthread_mutex_unlock(&mutex)) != 0)
+			err_msg(s, "pthread_mutex_unlock");
+		sleep(1);
 	}
 	
 	if (close(dp->dp_remote) == -1)
@@ -431,7 +448,7 @@ void download_start(struct dlinfo *dl)
 	/* Before we create threads to start download, we set the download
 	 * prompt first. and set the alarm too. */
 	download_prompt_set(dl->di_filename);
-	signal(SIGALRM, download_signal_handler);
+	download_register_alarm_handler();
 	alarm(1);
 
 	
@@ -463,6 +480,8 @@ void download_start(struct dlinfo *dl)
 		if ((s = pthread_join(thread[i], NULL)) != 0)
 			err_msg(s, "pthread_join");
 	}
+
+	download_progress_print(0);
 	free(thread);
 }
 
