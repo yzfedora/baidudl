@@ -28,7 +28,7 @@ void _err_exit(int flags, int err, char *fmt, ...)
 	char buf[EMSG_BUF];
 
 	va_start(ap, fmt);
-	*buf = 0;
+	strcpy(buf, "\n");
 	strcat(buf, fmt);
 	/* If errno is not zero, print the suitable string for errno */
 	if (err != 0) {

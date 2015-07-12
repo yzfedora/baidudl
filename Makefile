@@ -1,5 +1,5 @@
 PROGS	= bdpandl
-OBJS	= err_handler.o
+OBJS	= err_handler.o dlinfo.o dlpart.o dlcommon.o
 FLAGS	= -Wall -lpthread
 CC	= gcc
 
@@ -9,7 +9,7 @@ ALL: $(PROGS)
 debug: ALL
 debug: FLAGS+=-g -D__DEBUG__
 
-%.o: %.c %.h
+%.o: %.c
 	$(CC) -c $^ $(FLAGS)
 
 bdpandl: bdpandl.c $(OBJS)
