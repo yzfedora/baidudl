@@ -1,9 +1,28 @@
+/* This is a multi-thread download tool, for pan.baidu.com
+ *   		Copyright (C) 2015  Yang Zhang <yzfedora@gmail.com>
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ *************************************************************************/
 #define _POSIX_C_SOURCE	200809L
+#include <sys/types.h>
 #include <stdio.h>
 #include <unistd.h>
 #include <stdlib.h>
 #include <string.h>
 #include <pthread.h>
+#include <sys/time.h>
+#include <sys/select.h>
+#include <fcntl.h>
 #include <errno.h>
 #include "dlpart.h"
 #include "dlcommon.h"
@@ -82,15 +101,19 @@ int dlpart_recv_header(struct dlpart *dp)
 void dlpart_read(struct dlpart *dp, ssize_t *total_read,
 		ssize_t * bytes_per_sec)
 {
-	/* If any errors occured, the dp->dp_nrd will be set accordingly */
+	/* 
+	 * If any errors occured, -1 will returned, and errno will be
+	 * set correctly
+	 */
 	dp->dp_nrd = read(dp->dp_remote, dp->dp_buf, DLPART_BUFSZ - 1);
 	if (dp->dp_nrd <= 0)
 		return;
 
-	/*printf("\nthread %ld read %d bytes.\n", (long)pthread_self(), dp->dp_nrd);*/
+	/* 
+	 * Since we updated the 'total_read' and 'bytes_per_sec', calling
+	 * this dlpart_read need to be protected by pthead_mutex
+	 */
 	dp->dp_buf[dp->dp_nrd] = 0;
-	/* Since we updated the 'total_read' and 'bytes_per_sec', calling
-	 * this dlpart_read need to be protected by pthead_mutex */
 	if (total_read)
 		*total_read += dp->dp_nrd;
 	if (bytes_per_sec)
@@ -111,7 +134,7 @@ void dlpart_write(struct dlpart *dp)
 			len, fd, offset);*/
 		n = pwrite(dp->dp_local, buf, len, dp->dp_start);
 		if (n == -1) {
-			err_msg(errno, "pwrite");
+			err_msg(errno, "pwrite %d", dp->dp_local);
 			continue;
 		}
 		
@@ -129,7 +152,7 @@ void dlpart_delete(struct dlpart *dp)
 	free(dp);
 }
 
-struct dlpart *dlpart_new(struct dlinfo *dl)
+struct dlpart *dlpart_new(struct dlinfo *dl, ssize_t start, ssize_t end)
 {
 	struct dlpart *dp;
 
@@ -147,6 +170,29 @@ struct dlpart *dlpart_new(struct dlinfo *dl)
 	dp->read = dlpart_read;
 	dp->write = dlpart_write;
 	dp->delete = dlpart_delete;
+
+try_sendhdr_again:
+	dp->dp_start = start;
+	dp->dp_end = end;
+
+	dp->sendhdr(dp);
+	if (dp->recvhdr(dp) == -1) {
+		if (close(dp->dp_remote) == -1)
+			err_msg(errno, "close");
+
+		dp->dp_remote = dl->connect(dl);
+		goto try_sendhdr_again;
+	}
+
+	/*
+	 * for to get maximun of concurrency, set dp->dp_remote to nonblock.
+	 */
+	int flags;
+	if ((flags = fcntl(dp->dp_remote, F_GETFL, 0)) == -1)
+		err_exit(errno, "fcntl-getfl");
+	flags |= O_NONBLOCK;
+	if (fcntl(dp->dp_remote, F_SETFL, flags) == -1)
+		err_exit(errno, "fcntl-setfl");
 
 	return dp;
 }

@@ -1,3 +1,18 @@
+/* This is a multi-thread download tool, for pan.baidu.com
+ *   		Copyright (C) 2015  Yang Zhang <yzfedora@gmail.com>
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ *************************************************************************/
 #include <unistd.h>
 #include <stdlib.h>	/* strtol() */
 #include <string.h>
@@ -101,24 +116,33 @@ static void dlinfo_filename_decode(struct dlinfo *dl)
 	char tmp[DLINFO_NAME_MAX], *s = dl->di_filename;
 	int i, j, k, t;
 
-	for (i = j = 0; s[i]; i++, j++) {
-		if (s[i] == '%') {
-			/* following 2 bytes is hex-decimal of a char */
-			t = s[i + 3];
-			s[i + 3] = 0;
-
-			k = strtol(s + i + 1, NULL, 16);
-			tmp[j] = (char)k;
-
-			s[i + 3] = t;
-			i += 2;
-		} else {
-			tmp[j] = s[i];
-		}
+	/* strip the double-quotes */
+	for (i = j = 0; s[i] != '\r' && s[i+1] != '\n' && s[i]; i++) {
+		if (s[i] != '"')
+			tmp[j++] = s[i];
 	}
 	tmp[j] = 0;
 
-	strcpy(s, tmp);
+	for (i = j = 0; tmp[i]; i++, j++) {
+		if (tmp[i] == '%') {
+			/* following 2 bytes is hex-decimal of a char */
+			t = tmp[i + 3];
+			tmp[i + 3] = 0;
+
+			k = strtol(tmp + i + 1, NULL, 16);
+			s[j] = (char)k;
+
+			tmp[i + 3] = t;
+			i += 2;
+		} else {
+			s[j] = tmp[i];
+		}
+	}
+	s[j] = 0;
+
+	printf("Filename: %s, Length: %ld\n", dl->di_filename,
+		(long)dl->di_length);
+	//strcpy(s, tmp);
 }
 
 /*
@@ -160,17 +184,13 @@ static void dlinfo_recv_and_parsing(struct dlinfo *dl)
 				NULL, 10);
 	}
 
-#define _FILENAME	"filename=\""
+#define _FILENAME	"filename="
 	if ((p = strstr(buf, _FILENAME)) != NULL) {
 		if ((p = memccpy(dl->di_filename, p + sizeof(_FILENAME) - 1,
-				'"', 256)) == NULL)
+				'\n', 256)) == NULL)
 			err_msg(errno, "memccpy");
 
-		*(dl->di_filename + strlen(dl->di_filename) - 1) = 0;
 	}
-
-	debug("Filename: %s, Length: %ld\n", dl->di_filename,
-	 	(long)dl->di_length);
 }
 
 /*
@@ -266,39 +286,59 @@ static void dlinfo_alarm_launch(void)
 static void *download(void *arg)
 {
 	int s;
+	ssize_t orig_start, orig_end;
 	struct dlpart *dp = (struct dlpart *)arg;
 	struct dlinfo *dl = dp->dp_info;
-	ssize_t orig_start = dp->dp_start, orig_end = dp->dp_end;
 
-try_again:
-	dp->sendhdr(dp);
-	if (dp->recvhdr(dp) == -1) {
-		dp->delete(dp);	
-		if ((dp = dlpart_new(dl)) == NULL)
-			err_exit(0, "dlpart_new");
-
-		dp->dp_start = orig_start;
-		dp->dp_end = orig_end;
-		goto try_again;
-	}
 
 	printf("\nthread %ld starting to download range: %ld-%ld\n",
 			(long)pthread_self(), dp->dp_start, dp->dp_end);
-	dp->write(dp);
+
+	dp->write(dp);	/* write remaining data in the header. */
 	while (dp->dp_start < dp->dp_end) {
+		/*
+		 * only lock the dp->read call is necessary, since it may
+		 * update the global varibale total_read and bytes_per_sec.
+		 */
 		if ((s = pthread_mutex_lock(&mutex)) != 0)
 			err_msg(s, "pthread_mutex_lock");
 
 		dp->read(dp, &total_read, &bytes_per_sec);
-		if (dp->dp_nrd <= 0) {
-			if (dp->dp_nrd == 0)
-				err_thread_exit(0, "data missing...");
-			err_msg(errno, "read");
-		}
 
-		dp->write(dp);
 		if ((s = pthread_mutex_unlock(&mutex)) != 0)
 			err_msg(s, "pthread_mutex_unlock");
+
+
+		/*
+		 * If errno is EAGAIN or EWOULDBLOCK, it is a due to error.
+		 */
+		if (dp->dp_nrd == -1) {
+			if (errno == EAGAIN || errno == EWOULDBLOCK)
+				continue;
+
+			err_msg(errno, "read");
+		} else if (dp->dp_nrd == 0) {
+			/*
+			 * Sava download range, delete the old dp pointer.
+			 * and try to etablish a new connection which
+			 * returned by the dp->dp_remote.
+			 */
+			orig_start = dp->dp_start;
+			orig_end = dp->dp_end;
+			dp->delete(dp);
+
+			dp = dlpart_new(dl, orig_start, orig_end);
+			if (dp == NULL)
+				err_exit(errno, "dlpart_new");
+
+			printf("\nthread %ld starting to download range: %ld-%ld\n",
+				(long)pthread_self(), dp->dp_start, dp->dp_end);
+		}
+
+		/*
+		 * If all things is ok, no error, no timedout. just write it.
+		 */
+		dp->write(dp);
 	}
 	
 	dp->delete(dp);
@@ -309,8 +349,9 @@ void dlinfo_launch(struct dlinfo *dl)
 {
 	int i, s;
 	ssize_t pos = 0, part_size = dl->di_length / dl->di_nthread;
-	pthread_t *thread;
+	ssize_t start, end;
 	struct dlpart *dp;
+	pthread_t *thread;
 	
 	thread = (pthread_t *)malloc(sizeof(*thread) * dl->di_nthread);
 	if (NULL == thread)
@@ -323,12 +364,12 @@ void dlinfo_launch(struct dlinfo *dl)
 	dlinfo_alarm_launch();
 
 	for (i = 0; i < dl->di_nthread; i++) {
-		if ((dp = dlpart_new(dl)) == NULL)
+		start = pos;
+		end = ((i != dl->di_nthread - 1) ? (pos + part_size - 1) :
+				(dl->di_length - 1));
+
+		if ((dp = dlpart_new(dl, start, end)) == NULL)
 			err_exit(errno, "dlpart_new");
-		
-		dp->dp_start = pos;
-		dp->dp_end = ((i != dl->di_nthread - 1) ?
-			(pos + part_size - 1) : (dl->di_length - 1));
 		
 		if ((s = pthread_create(&thread[i], NULL, download, dp)) != 0)
 			err_exit(s, "pthread_create");
