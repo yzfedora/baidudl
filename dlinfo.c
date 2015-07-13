@@ -294,14 +294,13 @@ static void dlinfo_alarm_handler(int signo)
 	ssize_t speed = bytes_per_sec;
 
 #define PROGRESS_PRINT_WS "                                      "
-	while (speed > 1024) {
+	do {
 		speed >>= 10;
 		flags <<= 1;
-	}
+	} while (speed > 1024);
 	printf("\r"PROGRESS_PRINT_WS PROGRESS_PRINT_WS);
 	printf("\r[%-60s   %4ld%s/s  %4.1f%%]", prompt,
 			(long)speed,
-			(flags == 1) ? "B" :
 			(flags == 2) ? "KB" :
 			(flags == 4) ? "MB" : "GB",
 			((float)total_read / total) * 100);
@@ -350,7 +349,8 @@ static void *download(void *arg)
 	printf("\nthreads %ld starting to download range: %ld-%ld\n",
 			(long)pthread_self(), dp->dp_start, dp->dp_end);
 
-	dp->write(dp);	/* write remaining data in the header. */
+	/* write remaining data in the header. */
+	dp->write(dp, &total_read, &bytes_per_sec);
 	while (dp->dp_start < dp->dp_end) {
 		/*
 		 * only lock the dp->read call is necessary, since it may
@@ -359,10 +359,10 @@ static void *download(void *arg)
 		if ((s = pthread_mutex_lock(&mutex)) != 0)
 			err_msg(s, "pthread_mutex_lock");
 
-		dp->read(dp, &total_read, &bytes_per_sec);
+		dp->read(dp);
 
 		if (dp->dp_nrd > 0)
-			dp->write(dp);
+			dp->write(dp, &total_read, &bytes_per_sec);
 
 		if ((s = pthread_mutex_unlock(&mutex)) != 0)
 			err_msg(s, "pthread_mutex_unlock");
@@ -397,7 +397,6 @@ try_connect_again:
 				err_exit(errno, "dlpart_new");
 		}
 	}
-	
 	dp->delete(dp);
 	return NULL;
 }
@@ -430,8 +429,14 @@ void dlinfo_launch(struct dlinfo *dl)
 		if (dorecovery) {
 			dlinfo_records_recovery(dl, &start, sizeof(start));
 			dlinfo_records_recovery(dl, &end, sizeof(end));
-			/* total bytes real need to download */
 			nedl += (end - start);
+			
+			/* if this part is already finished, mark thread[i] */
+			if (start > end) {
+				thread[i] = 0;
+				continue;
+			}
+			/* total bytes real need to download */
 		} else {
 			start = pos;
 			end = ((i != dl->di_nthreads - 1) ? (pos + part_size - 1) :
@@ -453,8 +458,10 @@ void dlinfo_launch(struct dlinfo *dl)
 
 	/* Waiting the threads that we are created above. */
 	for (i = 0; i < dl->di_nthreads; i++) {
-		if ((s = pthread_join(thread[i], NULL)) != 0)
-			err_msg(s, "pthread_join");
+		if (thread[i] != 0) {
+			if ((s = pthread_join(thread[i], NULL)) != 0)
+				err_msg(s, "pthread_join");
+		}
 	}
 
 	dlinfo_alarm_handler(0);

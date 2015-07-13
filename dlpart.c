@@ -83,7 +83,7 @@ int dlpart_recv_header(struct dlpart *dp)
 	char *dt, *p, *ep;
 
 	while (is_header) {
-		dp->read(dp, NULL, NULL);
+		dp->read(dp);
 		if (dp->dp_nrd <= 0)
 			return -1;
 
@@ -124,8 +124,7 @@ int dlpart_recv_header(struct dlpart *dp)
 	return 0;
 }
 
-void dlpart_read(struct dlpart *dp, ssize_t *total_read,
-		ssize_t * bytes_per_sec)
+void dlpart_read(struct dlpart *dp)
 {
 	/* 
 	 * If any errors occured, -1 will returned, and errno will be
@@ -134,23 +133,14 @@ void dlpart_read(struct dlpart *dp, ssize_t *total_read,
 	dp->dp_nrd = read(dp->dp_remote, dp->dp_buf, DLPART_BUFSZ - 1);
 	if (dp->dp_nrd <= 0)
 		return;
-
-	/* 
-	 * Since we updated the 'total_read' and 'bytes_per_sec', calling
-	 * this dlpart_read need to be protected by pthead_mutex
-	 */
-	dp->dp_buf[dp->dp_nrd] = 0;
-	if (total_read)
-		*total_read += dp->dp_nrd;
-	if (bytes_per_sec)
-		*bytes_per_sec += dp->dp_nrd;
 }
 
 /*
  * Write 'dp->dp_nrd' data which pointed by 'dp->dp_buf' to local file.
  * And the offset 'dp->dp_start' will be updated also.
  */
-void dlpart_write(struct dlpart *dp)
+void dlpart_write(struct dlpart *dp, ssize_t *total_read,
+		ssize_t *bytes_per_sec)
 {
 	unsigned int n, len = dp->dp_nrd;
 	char *buf = dp->dp_buf;
@@ -168,6 +158,17 @@ void dlpart_write(struct dlpart *dp)
 		buf += n;	
 		dp->dp_start += n;
 	}
+
+	/* 
+	 * Since we updated the 'total_read' and 'bytes_per_sec', calling
+	 * this dlpart_read need to be protected by pthead_mutex
+	 */
+	dp->dp_buf[dp->dp_nrd] = 0;
+	if (total_read)
+		*total_read += dp->dp_nrd;
+	if (bytes_per_sec)
+		*bytes_per_sec += dp->dp_nrd;
+
 	dlpart_update(dp);
 }
 

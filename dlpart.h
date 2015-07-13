@@ -31,8 +31,8 @@ struct dlpart {
 
 	void (*sendhdr)(struct dlpart *);
 	int  (*recvhdr)(struct dlpart *);
-	void (*read)(struct dlpart *, ssize_t *, ssize_t *);
-	void (*write)(struct dlpart *);
+	void (*read)(struct dlpart *);
+	void (*write)(struct dlpart *, ssize_t *, ssize_t *);
 	void (*delete)(struct dlpart *);
 };
 
