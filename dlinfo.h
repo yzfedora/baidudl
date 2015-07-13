@@ -28,7 +28,7 @@
 struct dlinfo {
 	int	di_remote;
 	int	di_local;
-	int	di_nthread;	/* number of threads to download */
+	int	di_nthreads;	/* number of threads to download */
 	ssize_t	di_length;	/* total length of the file */
 
 	char	di_filename[DLINFO_NAME_MAX];
@@ -43,5 +43,5 @@ struct dlinfo {
 	void (*delete)(struct dlinfo *);
 };
 
-struct dlinfo *dlinfo_new(char *url, int nthread);
+struct dlinfo *dlinfo_new(char *url, int nthreads);
 #endif

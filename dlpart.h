@@ -18,10 +18,11 @@
 #include <sys/types.h>
 #include "dlinfo.h"
 
-struct dlpart {
 #define DLPART_BUFSZ	(1024 * 256)
+
+struct dlpart {
+	int	dp_no;
 	int	dp_remote;	/* remote server file descriptor */
-	int	dp_local;	/* local file descriptor */
 	ssize_t	dp_start;
 	ssize_t	dp_end;
 	char	dp_buf[DLPART_BUFSZ];
@@ -35,5 +36,5 @@ struct dlpart {
 	void (*delete)(struct dlpart *);
 };
 
-struct dlpart *dlpart_new(struct dlinfo *, ssize_t, ssize_t);
+struct dlpart *dlpart_new(struct dlinfo *, ssize_t, ssize_t, int);
 #endif

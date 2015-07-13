@@ -37,7 +37,7 @@ static void usage(const char *progname)
 
 int main(int argc, char *argv[])
 {
-	int opt, nthread = 5;	/* default using 4 threads to download */
+	int opt, nthreads = 5;	/* default using 4 threads to download */
 	struct dlinfo *dl;
 
 	while ((opt = getopt(argc, argv, "n:h")) != -1) {
@@ -45,7 +45,7 @@ int main(int argc, char *argv[])
 		case 'n':
 			/* for some reason: pan.baidu.com support 5 maximum
 			 * connection to download. */
-			nthread = strtol(optarg, NULL, 10);
+			nthreads = strtol(optarg, NULL, 10);
 			break;
 		case 'h':
 		default:
@@ -56,7 +56,7 @@ int main(int argc, char *argv[])
 	if (argc != optind + 1)
 		usage(argv[0]);
 
-	if ((dl = dlinfo_new(argv[optind], nthread)) == NULL)
+	if ((dl = dlinfo_new(argv[optind], nthreads)) == NULL)
 		return -1;
 
 	dl->launch(dl);

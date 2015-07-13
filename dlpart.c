@@ -28,6 +28,32 @@
 #include "dlcommon.h"
 #include "err_handler.h"
 
+/*
+ * Suppoort continuous download:
+ * | file | nthreads | 1th-thread range | 2th-thread range |...
+ * |length|  4bytes  |    8bytes x 2    |   8bytes x 2     |...
+ */
+static void dlpart_update(struct dlpart *dp)
+{
+	struct dlinfo *dl = dp->dp_info;
+	int ret, local = dl->di_local;
+	typeof (dp->dp_start) start = dp->dp_start,
+	       	end = dp->dp_end,
+		offset = dl->di_length + sizeof(dl->di_nthreads) +
+			sizeof(start) * dp->dp_no * 2;
+
+try_pwrite_range_start:
+	ret = pwrite(local, &start, sizeof(start), offset);
+	if (ret != sizeof(start))
+		goto try_pwrite_range_start;
+
+try_pwrite_range_end:
+	ret = pwrite(local, &end, sizeof(end), offset + sizeof(start));
+	if (ret != sizeof(end))
+		goto try_pwrite_range_end;
+}
+
+
 /* HTTP Header format:
  * 	GET url\r\n HTTP/1.1\r\n
  * 	Range: bytes=x-y
@@ -132,9 +158,9 @@ void dlpart_write(struct dlpart *dp)
 	while (len > 0) {
 		/*debug("pwrite %d bytes >> fd(%d), offset %ld\n",
 			len, fd, offset);*/
-		n = pwrite(dp->dp_local, buf, len, dp->dp_start);
+		n = pwrite(dp->dp_info->di_local, buf, len, dp->dp_start);
 		if (n == -1) {
-			err_msg(errno, "pwrite %d", dp->dp_local);
+			err_msg(errno, "pwrite");
 			continue;
 		}
 		
@@ -142,7 +168,7 @@ void dlpart_write(struct dlpart *dp)
 		buf += n;	
 		dp->dp_start += n;
 	}
-
+	dlpart_update(dp);
 }
 
 void dlpart_delete(struct dlpart *dp)
@@ -152,7 +178,7 @@ void dlpart_delete(struct dlpart *dp)
 	free(dp);
 }
 
-struct dlpart *dlpart_new(struct dlinfo *dl, ssize_t start, ssize_t end)
+struct dlpart *dlpart_new(struct dlinfo *dl, ssize_t start, ssize_t end, int no)
 {
 	struct dlpart *dp;
 
@@ -160,9 +186,8 @@ struct dlpart *dlpart_new(struct dlinfo *dl, ssize_t start, ssize_t end)
 		return NULL;
 
 	memset(dp, 0, sizeof(*dp));
+	dp->dp_no = no;
 	dp->dp_remote = dl->connect(dl);
-	/* copy basic info from 'struct dlinfo' */
-	dp->dp_local = dl->di_local;
 	dp->dp_info = dl;
 
 	dp->sendhdr = dlpart_send_header;

@@ -33,6 +33,7 @@
 
 /* Using to print the progress, percent... of download info */
 #define	DLINFO_PROMPT_SZ	1024
+int dorecovery;
 static char prompt[DLINFO_PROMPT_SZ];
 static ssize_t total,
 	       total_read,
@@ -193,19 +194,73 @@ static void dlinfo_recv_and_parsing(struct dlinfo *dl)
 	}
 }
 
+static void dlinfo_records_recovery(struct dlinfo *dl, void *buf,
+		ssize_t len)
+{
+	int ret;
+	if ((ret = read(dl->di_local, buf, len)) <= 0)
+		err_exit(errno, "records recovery occur errors");
+}
+
+static void dlinfo_records_recovery_nthreads(struct dlinfo *dl)
+{
+	ssize_t filelen = lseek(dl->di_local, 0, SEEK_END);
+	ssize_t recordlen;
+
+	lseek(dl->di_local, dl->di_length, SEEK_SET);
+
+	dlinfo_records_recovery(dl, &dl->di_nthreads,
+			sizeof(dl->di_nthreads));
+
+	recordlen = dl->di_nthreads * 2 * sizeof(ssize_t) +
+			sizeof(dl->di_nthreads);
+	printf("file: %ld bytes, records: %ld bytes, real: %ld bytes\n",
+			dl->di_length, recordlen, filelen);
+	if (dl->di_length + recordlen != filelen)
+		err_exit(0, "can't recovery the file: %s", dl->di_filename);
+}
+
 /*
  * Open a file descriptor for store the download data, and store the
  * file descriptor to variable dl->di_local.
  */
 static int dlinfo_open_local_file(struct dlinfo *dl)
 {
-	int *fd = &dl->di_local;
-	int flags = O_WRONLY | O_CREAT | O_TRUNC;
+#define PERMS (S_IRUSR | S_IWUSR)
+	int fd, ret, flags = O_RDWR | O_CREAT | O_EXCL;
 
-	if ((*fd = open(dl->di_filename, flags, 0600)) == -1)
+	if ((fd = open(dl->di_filename, flags, PERMS)) == -1) {
+		if (errno == EEXIST) {
+			/*
+			 * same file already exists. try recovery records
+			 */
+			flags &= ~O_EXCL;
+			if ((fd = open(dl->di_filename, flags, PERMS)) == -1)
+				err_exit(errno, "open");
+
+			dorecovery = 1;
+			goto dlinfo_open_local_file_return;
+		}
 		err_exit(errno, "open");
+	}
 
-	return *fd;
+	/* If no file exists, append number of threads records to the file.*/
+try_pwrite_nthreads_again:
+	ret = pwrite(fd, &dl->di_nthreads,
+			sizeof(dl->di_nthreads), dl->di_length);
+	if (ret != sizeof(dl->di_nthreads))
+		goto try_pwrite_nthreads_again;
+
+
+dlinfo_open_local_file_return:
+	dl->di_local = fd;
+	return fd;
+}
+
+static void dlinfo_records_removing(struct dlinfo *dl)
+{
+	if (ftruncate(dl->di_local, dl->di_length) == -1)
+		err_exit(errno, "ftruncate");
 }
 
 /**********************************************************************
@@ -244,7 +299,7 @@ static void dlinfo_alarm_handler(int signo)
 		flags <<= 1;
 	}
 	printf("\r"PROGRESS_PRINT_WS PROGRESS_PRINT_WS);
-	printf("\r[%-60s   %4ld%s/s  %2.1f%%]", prompt,
+	printf("\r[%-60s   %4ld%s/s  %4.1f%%]", prompt,
 			(long)speed,
 			(flags == 1) ? "B" :
 			(flags == 2) ? "KB" :
@@ -285,13 +340,14 @@ static void dlinfo_alarm_launch(void)
  */
 static void *download(void *arg)
 {
-	int s;
+	int s, btimes = 0;	/* block times */
+	int orig_no;
 	ssize_t orig_start, orig_end;
 	struct dlpart *dp = (struct dlpart *)arg;
 	struct dlinfo *dl = dp->dp_info;
 
 
-	printf("\nthread %ld starting to download range: %ld-%ld\n",
+	printf("\nthreads %ld starting to download range: %ld-%ld\n",
 			(long)pthread_self(), dp->dp_start, dp->dp_end);
 
 	dp->write(dp);	/* write remaining data in the header. */
@@ -305,16 +361,22 @@ static void *download(void *arg)
 
 		dp->read(dp, &total_read, &bytes_per_sec);
 
+		if (dp->dp_nrd > 0)
+			dp->write(dp);
+
 		if ((s = pthread_mutex_unlock(&mutex)) != 0)
 			err_msg(s, "pthread_mutex_unlock");
-
 
 		/*
 		 * If errno is EAGAIN or EWOULDBLOCK, it is a due to error.
 		 */
 		if (dp->dp_nrd == -1) {
-			if (errno == EAGAIN || errno == EWOULDBLOCK)
+			if (errno == EAGAIN || errno == EWOULDBLOCK) {
+				if (btimes++ > 20)
+					goto try_connect_again;
+				sleep(1 + btimes);
 				continue;
+			}
 
 			err_msg(errno, "read");
 		} else if (dp->dp_nrd == 0) {
@@ -323,22 +385,17 @@ static void *download(void *arg)
 			 * and try to etablish a new connection which
 			 * returned by the dp->dp_remote.
 			 */
+try_connect_again:
+			btimes = 0;
 			orig_start = dp->dp_start;
 			orig_end = dp->dp_end;
+			orig_no = dp->dp_no;
 			dp->delete(dp);
 
-			dp = dlpart_new(dl, orig_start, orig_end);
+			dp = dlpart_new(dl, orig_start, orig_end, orig_no);
 			if (dp == NULL)
 				err_exit(errno, "dlpart_new");
-
-			printf("\nthread %ld starting to download range: %ld-%ld\n",
-				(long)pthread_self(), dp->dp_start, dp->dp_end);
 		}
-
-		/*
-		 * If all things is ok, no error, no timedout. just write it.
-		 */
-		dp->write(dp);
 	}
 	
 	dp->delete(dp);
@@ -348,12 +405,18 @@ static void *download(void *arg)
 void dlinfo_launch(struct dlinfo *dl)
 {
 	int i, s;
-	ssize_t pos = 0, part_size = dl->di_length / dl->di_nthread;
-	ssize_t start, end;
+	ssize_t pos = 0, part_size = dl->di_length / dl->di_nthreads;
+	ssize_t start, end, nedl = 0;	/* nedl == need to download */
 	struct dlpart *dp;
 	pthread_t *thread;
 	
-	thread = (pthread_t *)malloc(sizeof(*thread) * dl->di_nthread);
+	/* Set offset of the file to the start of records, and recovery
+	 * number of threads to dl->di_nthreads. */
+	if (dorecovery) {
+		dlinfo_records_recovery_nthreads(dl);
+	}
+
+	thread = (pthread_t *)malloc(sizeof(*thread) * dl->di_nthreads);
 	if (NULL == thread)
 		err_exit(errno, "malloc");
 	
@@ -363,29 +426,42 @@ void dlinfo_launch(struct dlinfo *dl)
 	dlinfo_register_alarm_handler();
 	dlinfo_alarm_launch();
 
-	for (i = 0; i < dl->di_nthread; i++) {
-		start = pos;
-		end = ((i != dl->di_nthread - 1) ? (pos + part_size - 1) :
-				(dl->di_length - 1));
+	for (i = 0; i < dl->di_nthreads; i++) {
+		if (dorecovery) {
+			dlinfo_records_recovery(dl, &start, sizeof(start));
+			dlinfo_records_recovery(dl, &end, sizeof(end));
+			/* total bytes real need to download */
+			nedl += (end - start);
+		} else {
+			start = pos;
+			end = ((i != dl->di_nthreads - 1) ? (pos + part_size - 1) :
+					(dl->di_length - 1));
+			pos += part_size;
+		}
 
-		if ((dp = dlpart_new(dl, start, end)) == NULL)
+		if ((dp = dlpart_new(dl, start, end, i)) == NULL)
 			err_exit(errno, "dlpart_new");
-		
+
 		if ((s = pthread_create(&thread[i], NULL, download, dp)) != 0)
 			err_exit(s, "pthread_create");
-		
-		pos += part_size;
 	}
 	
+	/* Recovery already download bytes */
+	if (dorecovery) {
+		total_read = total - nedl;
+	}
+
 	/* Waiting the threads that we are created above. */
-	for (i = 0; i < dl->di_nthread; i++) {
+	for (i = 0; i < dl->di_nthreads; i++) {
 		if ((s = pthread_join(thread[i], NULL)) != 0)
 			err_msg(s, "pthread_join");
 	}
 
 	dlinfo_alarm_handler(0);
-	printf("\n----------------download finished--------------------\n");
+	dlinfo_records_removing(dl);	/* Removing trailing records */
 	free(thread);
+
+	printf("\n----------------download finished--------------------\n");
 }
 
 void dlinfo_delete(struct dlinfo *dl)
@@ -395,7 +471,7 @@ void dlinfo_delete(struct dlinfo *dl)
 	free(dl);
 }
 
-struct dlinfo *dlinfo_new(char *url, int nthread)
+struct dlinfo *dlinfo_new(char *url, int nthreads)
 {
 	struct dlinfo *dl;
 
@@ -403,7 +479,7 @@ struct dlinfo *dlinfo_new(char *url, int nthread)
 		memset(dl, 0, sizeof(*dl));
 		strcpy(dl->di_serv, "http");	/* default port number	*/
 		strcpy(dl->di_url, url);
-		dl->di_nthread = nthread;
+		dl->di_nthreads = nthreads;
 
 		dl->connect = dlinfo_connect;
 		dl->launch = dlinfo_launch;		
