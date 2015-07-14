@@ -28,6 +28,9 @@
 #include "dlcommon.h"
 #include "err_handler.h"
 
+static pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
+
+
 /*
  * Suppoort continuous download:
  * | file | nthreads | 1th-thread range | 2th-thread range |...
@@ -79,7 +82,7 @@ void dlpart_send_header(struct dlpart *dp)
 int dlpart_recv_header(struct dlpart *dp)
 {
 	int is_header = 1, code;
-	ssize_t start = -1, end = -1;
+	ssize_t start, end;
 	char *dt, *p, *ep;
 
 	while (is_header) {
@@ -105,18 +108,19 @@ int dlpart_recv_header(struct dlpart *dp)
 #define RANGE	"Content-Range: bytes "
 		if ((p = strstr(dp->dp_buf, RANGE)) != NULL) {
 			start = strtol(p + sizeof(RANGE) - 1, &ep, 10);
-			end = (ep && *ep) ? strtol(ep + 1, NULL, 10) : end;
-			/*if  (ep && *ep == '-')
-				end = strtol(ep + 1, NULL, 10);*/
+			if  (ep && *ep == '-')
+				end = strtol(ep + 1, NULL, 10);
 		}
 	}
 	
-	if (start < 0 || end < start)
+	if (start != dp->dp_start || end != dp->dp_end) {
+		printf("response range error: %ld-%ld (%ld-%ld)\n", start, end, dp->dp_start, dp->dp_end);
 		return -1;
+	}
 		/*err_exit(0, "Invalid range: bytes=%ld-%ld", start, end);*/
 
-	dp->dp_start = start;
-	dp->dp_end = end;
+	//dp->dp_start = start;
+	//dp->dp_end = end;
 	/* FUCKING THE IMPLEMENTATION OF STRNCPY! try using memcpy() instead.
 	 * strncpy(dp->dp_buf, dt, dp->dp_nrd);
 	 */
@@ -133,6 +137,9 @@ void dlpart_read(struct dlpart *dp)
 	dp->dp_nrd = read(dp->dp_remote, dp->dp_buf, DLPART_BUFSZ - 1);
 	if (dp->dp_nrd <= 0)
 		return;
+	
+	dp->dp_buf[dp->dp_nrd] = 0;
+	
 }
 
 /*
@@ -142,7 +149,7 @@ void dlpart_read(struct dlpart *dp)
 void dlpart_write(struct dlpart *dp, ssize_t *total_read,
 		ssize_t *bytes_per_sec)
 {
-	unsigned int n, len = dp->dp_nrd;
+	int s, n, len = dp->dp_nrd;
 	char *buf = dp->dp_buf;
 
 	while (len > 0) {
@@ -159,15 +166,24 @@ void dlpart_write(struct dlpart *dp, ssize_t *total_read,
 		dp->dp_start += n;
 	}
 
+	/*
+	 * only lock the dp->read call is necessary, since it may
+	 * update the global varibale total_read and bytes_per_sec.
+	 */
+	if ((s = pthread_mutex_lock(&mutex)) != 0)
+		err_msg(s, "pthread_mutex_lock");
+
 	/* 
 	 * Since we updated the 'total_read' and 'bytes_per_sec', calling
 	 * this dlpart_read need to be protected by pthead_mutex
 	 */
-	dp->dp_buf[dp->dp_nrd] = 0;
 	if (total_read)
 		*total_read += dp->dp_nrd;
 	if (bytes_per_sec)
 		*bytes_per_sec += dp->dp_nrd;
+	
+	if ((s = pthread_mutex_unlock(&mutex)) != 0)
+		err_msg(s, "pthread_mutex_unlock");
 
 	dlpart_update(dp);
 }

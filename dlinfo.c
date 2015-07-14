@@ -38,7 +38,6 @@ static char prompt[DLINFO_PROMPT_SZ];
 static ssize_t total,
 	       total_read,
 	       bytes_per_sec;
-static pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
 
 
 /*
@@ -299,7 +298,7 @@ static void dlinfo_alarm_handler(int signo)
 		flags <<= 1;
 	} while (speed > 1024);
 	printf("\r"PROGRESS_PRINT_WS PROGRESS_PRINT_WS);
-	printf("\r[%-60s   %4ld%s/s  %4.1f%%]", prompt,
+	printf("\r[%-60s  %4ld%s/s %5.1f%%]", prompt,
 			(long)speed,
 			(flags == 2) ? "KB" :
 			(flags == 4) ? "MB" : "GB",
@@ -339,7 +338,7 @@ static void dlinfo_alarm_launch(void)
  */
 static void *download(void *arg)
 {
-	int s, btimes = 0;	/* block times */
+	int btimes = 0;	/* block times */
 	int orig_no;
 	ssize_t orig_start, orig_end;
 	struct dlpart *dp = (struct dlpart *)arg;
@@ -352,20 +351,7 @@ static void *download(void *arg)
 	/* write remaining data in the header. */
 	dp->write(dp, &total_read, &bytes_per_sec);
 	while (dp->dp_start < dp->dp_end) {
-		/*
-		 * only lock the dp->read call is necessary, since it may
-		 * update the global varibale total_read and bytes_per_sec.
-		 */
-		if ((s = pthread_mutex_lock(&mutex)) != 0)
-			err_msg(s, "pthread_mutex_lock");
-
 		dp->read(dp);
-
-		if (dp->dp_nrd > 0)
-			dp->write(dp, &total_read, &bytes_per_sec);
-
-		if ((s = pthread_mutex_unlock(&mutex)) != 0)
-			err_msg(s, "pthread_mutex_unlock");
 
 		/*
 		 * If errno is EAGAIN or EWOULDBLOCK, it is a due to error.
@@ -374,7 +360,7 @@ static void *download(void *arg)
 			if (errno == EAGAIN || errno == EWOULDBLOCK) {
 				if (btimes++ > 20)
 					goto try_connect_again;
-				sleep(1 + btimes);
+				sleep(1);
 				continue;
 			}
 
@@ -396,6 +382,10 @@ try_connect_again:
 			if (dp == NULL)
 				err_exit(errno, "dlpart_new");
 		}
+
+		btimes = 0;
+		dp->write(dp, &total_read, &bytes_per_sec);
+
 	}
 	dp->delete(dp);
 	return NULL;
@@ -433,8 +423,12 @@ void dlinfo_launch(struct dlinfo *dl)
 			
 			/* if this part is already finished, mark thread[i] */
 			if (start > end) {
-				thread[i] = 0;
-				continue;
+				if (start == end + 1) {
+					thread[i] = 0;
+					continue;
+				}
+				err_exit(0, "recovery error range: %ld-%ld\n",
+						start, end);
 			}
 			/* total bytes real need to download */
 		} else {
