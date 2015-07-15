@@ -50,7 +50,7 @@ static char *dlinfo_init(struct dlinfo *dl)
 	     *url = dl->di_url;
 
 	start = strstr(url, "://");
-	if (start == NULL) {
+	if (NULL == start) {
 		start = url;
 	} else {	/* parsing service name	*/
 		memccpy(dl->di_serv, url, ':', 64);
@@ -59,7 +59,7 @@ static char *dlinfo_init(struct dlinfo *dl)
 	}
 	
 	end = strstr(start, "/");
-	if (end == NULL)
+	if (NULL == end)
 		end = url + strlen(url);
 
 	strncpy(ret, start, end - start);
@@ -100,7 +100,7 @@ int dlinfo_connect(struct dlinfo *dl)
 
 	}
 	
-	if (ai == NULL)
+	if (NULL == ai)
 		err_exit(0, "Couldn't connection to: %s\n", dl->di_host);
 
 
@@ -179,25 +179,34 @@ static void dlinfo_recv_and_parsing(struct dlinfo *dl)
 	}
 
 #define _CONTENT_LENGTH	"Content-Length: "
-	if ((p = strstr(buf, _CONTENT_LENGTH)) != NULL) {
+	if (NULL != (p = strstr(buf, _CONTENT_LENGTH))) {
 		dl->di_length = strtol(p + sizeof(_CONTENT_LENGTH) - 1,
 				NULL, 10);
 	}
+	
+	/* User specified filename */
+	if (dl->di_filename && *dl->di_filename)
+		return;
 
 #define _FILENAME	"filename="
-	if ((p = strstr(buf, _FILENAME)) != NULL) {
-		if ((p = memccpy(dl->di_filename, p + sizeof(_FILENAME) - 1,
-				'\n', 256)) == NULL)
+	if (NULL != (p = strstr(buf, _FILENAME))) {
+		p = memccpy(dl->di_filename, p + sizeof(_FILENAME) - 1,
+				'\n', 256);
+		if (NULL == p)
 			err_msg(errno, "memccpy");
 
 	}
 }
 
+/*
+ * dlinfo_records_* functions is NOT Multi-Threads Safe, because it using
+ * file's offset to read data. any more than one threads read from it at
+ * same time will cause unknown results.
+ */
 static void dlinfo_records_recovery(struct dlinfo *dl, void *buf,
 		ssize_t len)
 {
-	int ret;
-	if ((ret = read(dl->di_local, buf, len)) <= 0)
+	if (read(dl->di_local, buf, len) != len)
 		err_exit(errno, "records recovery occur errors");
 }
 
@@ -206,17 +215,81 @@ static void dlinfo_records_recovery_nthreads(struct dlinfo *dl)
 	ssize_t filelen = lseek(dl->di_local, 0, SEEK_END);
 	ssize_t recordlen;
 
+	/* seek to the start of the records. and retriving number of threads.*/
 	lseek(dl->di_local, dl->di_length, SEEK_SET);
-
 	dlinfo_records_recovery(dl, &dl->di_nthreads,
 			sizeof(dl->di_nthreads));
 
+	/* calculate the records length. it should be equal the ('filelen' -
+	 * dl->di_length) */
 	recordlen = dl->di_nthreads * 2 * sizeof(ssize_t) +
 			sizeof(dl->di_nthreads);
-	printf("file: %ld bytes, records: %ld bytes, real: %ld bytes\n",
+
+	printf("File: %ld bytes, Records: %ld bytes, Real: %ld bytes\n",
 			dl->di_length, recordlen, filelen);
+
 	if (dl->di_length + recordlen != filelen)
-		err_exit(0, "can't recovery the file: %s", dl->di_filename);
+		err_exit(0, "can't recovery the file: %s, unmatched record"
+				"length", dl->di_filename);
+}
+
+/*
+ * Recovery the 'total_read' field, and the range of per threads should
+ * download where start from.
+ */
+static ssize_t dlinfo_records_recovery_all(struct dlinfo *dl)
+{
+	int i;
+	ssize_t start, end, nedl = 0;
+	struct dlthreads **dt = &dl->di_threads;
+
+	dlinfo_records_recovery_nthreads(dl);
+	
+	/* this isn't necessary, but for a non-dependencies impl. */
+	lseek(dl->di_local, dl->di_length + sizeof(dl->di_nthreads), SEEK_SET);
+	for (i = 0; i < dl->di_nthreads; i++) {
+		/*
+		 * if dt is second pointer in the linked list, dt = dt->next.
+		 * we need to malloc a block memory for it.
+		 */
+		if (NULL == *dt) {
+			if (NULL == (*dt = malloc(sizeof(**dt))))
+				err_exit(errno, "malloc");
+		}
+
+		dlinfo_records_recovery(dl, &start, sizeof(start));
+		dlinfo_records_recovery(dl, &end, sizeof(end));
+		if (start > end) {
+			/* 
+			 * if this range is finished, set 'dt->thread' and
+			 * 'dt->dp both to 0 or NULL properly'.
+			 */
+			if (start == end + 1) {
+				(*dt)->thread = 0;
+				(*dt)->dp = NULL;
+				goto next_range;
+			}
+			err_exit(0, "recovery error range: %ld-%ld\n",
+					start, end);
+		}
+
+		if (NULL == ((*dt)->dp = dlpart_new(dl, start, end, i)))
+			err_exit(errno, "malloc");
+		
+		nedl += (end - start);
+next_range:
+		dt = &((*dt)->next);
+	}
+
+	total_read = total - nedl;
+	return total_read;
+}
+
+
+static void dlinfo_records_removing(struct dlinfo *dl)
+{
+	if (ftruncate(dl->di_local, dl->di_length) == -1)
+		err_exit(errno, "ftruncate");
 }
 
 /*
@@ -256,11 +329,6 @@ dlinfo_open_local_file_return:
 	return fd;
 }
 
-static void dlinfo_records_removing(struct dlinfo *dl)
-{
-	if (ftruncate(dl->di_local, dl->di_length) == -1)
-		err_exit(errno, "ftruncate");
-}
 
 /**********************************************************************
  *                     basic download implementations                 *
@@ -345,8 +413,8 @@ static void *download(void *arg)
 	struct dlinfo *dl = dp->dp_info;
 
 
-	printf("\nthreads %ld starting to download range: %ld-%ld\n",
-			(long)pthread_self(), dp->dp_start, dp->dp_end);
+	/*printf("\nthreads %ld starting to download range: %ld-%ld\n",
+			(long)pthread_self(), dp->dp_start, dp->dp_end);*/
 
 	/* write remaining data in the header. */
 	dp->write(dp, &total_read, &bytes_per_sec);
@@ -379,7 +447,7 @@ try_connect_again:
 			dp->delete(dp);
 
 			dp = dlpart_new(dl, orig_start, orig_end, orig_no);
-			if (dp == NULL)
+			if (NULL == dp)
 				err_exit(errno, "dlpart_new");
 		}
 
@@ -387,27 +455,55 @@ try_connect_again:
 		dp->write(dp, &total_read, &bytes_per_sec);
 
 	}
-	dp->delete(dp);
+
 	return NULL;
+}
+
+static void dlinfo_range_generator(struct dlinfo *dl)
+{
+	int i;
+	ssize_t pos = 0, size = dl->di_length / dl->di_nthreads;
+	ssize_t start, end;
+	struct dlthreads **dt = &dl->di_threads;
+
+	for (i = 0; i < dl->di_nthreads; i++) {
+		/*
+		 * if dt is second pointer in the linked, dt = dt->next.
+		 * we need to malloc a block memory for it.
+		 */
+		if (NULL == *dt) {
+			if (NULL == (*dt = malloc(sizeof(**dt))))
+				err_exit(errno, "malloc");
+		}
+
+		start = pos;
+		end = (i != dl->di_nthreads - 1) ?
+				(pos + size - 1) : (dl->di_length - 1);
+		pos += size;
+
+		if (NULL == ((*dt)->dp = dlpart_new(dl, start, end, i)))
+			err_exit(errno, "malloc");
+
+		(*dt)->next = NULL;
+		dt = &((*dt)->next);
+	}
 }
 
 void dlinfo_launch(struct dlinfo *dl)
 {
-	int i, s;
-	ssize_t pos = 0, part_size = dl->di_length / dl->di_nthreads;
-	ssize_t start, end, nedl = 0;	/* nedl == need to download */
-	struct dlpart *dp;
-	pthread_t *thread;
-	
+	int s;
+	struct dlthreads *dt;
+
 	/* Set offset of the file to the start of records, and recovery
 	 * number of threads to dl->di_nthreads. */
 	if (dorecovery) {
-		dlinfo_records_recovery_nthreads(dl);
+		dlinfo_records_recovery_all(dl);
+	} else {
+		dlinfo_range_generator(dl);
 	}
 
-	thread = (pthread_t *)malloc(sizeof(*thread) * dl->di_nthreads);
-	if (NULL == thread)
-		err_exit(errno, "malloc");
+	/* start to create download threads. */
+	printf("launching %d threads to download...\n", dl->di_nthreads);
 	
 	/* Before we create threads to start download, we set the download
 	 * prompt first. and set the alarm too. */
@@ -415,71 +511,52 @@ void dlinfo_launch(struct dlinfo *dl)
 	dlinfo_register_alarm_handler();
 	dlinfo_alarm_launch();
 
-	for (i = 0; i < dl->di_nthreads; i++) {
-		if (dorecovery) {
-			dlinfo_records_recovery(dl, &start, sizeof(start));
-			dlinfo_records_recovery(dl, &end, sizeof(end));
-			nedl += (end - start);
-			
-			/* if this part is already finished, mark thread[i] */
-			if (start > end) {
-				if (start == end + 1) {
-					thread[i] = 0;
-					continue;
-				}
-				err_exit(0, "recovery error range: %ld-%ld\n",
-						start, end);
-			}
-			/* total bytes real need to download */
-		} else {
-			start = pos;
-			end = ((i != dl->di_nthreads - 1) ? (pos + part_size - 1) :
-					(dl->di_length - 1));
-			pos += part_size;
-		}
-
-		if ((dp = dlpart_new(dl, start, end, i)) == NULL)
-			err_exit(errno, "dlpart_new");
-
-		if ((s = pthread_create(&thread[i], NULL, download, dp)) != 0)
+	dt = dl->di_threads;
+	while (NULL != dt) {
+		if ((s = pthread_create(&dt->thread, NULL, download,
+						dt->dp)) != 0)
 			err_exit(s, "pthread_create");
-	}
-	
-	/* Recovery already download bytes */
-	if (dorecovery) {
-		total_read = total - nedl;
+		dt = dt->next;
 	}
 
 	/* Waiting the threads that we are created above. */
-	for (i = 0; i < dl->di_nthreads; i++) {
-		if (thread[i] != 0) {
-			if ((s = pthread_join(thread[i], NULL)) != 0)
+	dt = dl->di_threads;
+	while (NULL != dt) {
+		if (0 != dt->thread && NULL != dt->dp) {
+			if ((s = pthread_join(dt->thread, NULL)) != 0)
 				err_msg(s, "pthread_join");
 		}
+		dt = dt->next;
 	}
 
 	dlinfo_alarm_handler(0);
 	dlinfo_records_removing(dl);	/* Removing trailing records */
-	free(thread);
-
-	printf("\n----------------download finished--------------------\n");
+	printf("\n");
 }
 
 void dlinfo_delete(struct dlinfo *dl)
 {
+	struct dlthreads *dt = dl->di_threads;
+
 	if (close(dl->di_local) == -1)
 		err_msg(errno, "close");
-	free(dl);
+	while (NULL != dt) {
+		free(dt->dp);
+		dt = dt->next;
+	}
+	free(dt);
 }
 
-struct dlinfo *dlinfo_new(char *url, int nthreads)
+struct dlinfo *dlinfo_new(char *url, char *filename, int nthreads)
 {
 	struct dlinfo *dl;
 
-	if ((dl = (struct dlinfo *)malloc(sizeof(*dl))) != NULL) {
+	if (NULL != (dl = (struct dlinfo *)malloc(sizeof(*dl)))) {
 		memset(dl, 0, sizeof(*dl));
 		strcpy(dl->di_serv, "http");	/* default port number	*/
 		strcpy(dl->di_url, url);
+		if (NULL != filename)
+			strcpy(dl->di_filename, filename);
 		dl->di_nthreads = nthreads;
 
 		dl->connect = dlinfo_connect;

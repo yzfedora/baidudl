@@ -90,7 +90,7 @@ int dlpart_recv_header(struct dlpart *dp)
 		if (dp->dp_nrd <= 0)
 			return -1;
 
-		if ((dt = strstr(dp->dp_buf, "\r\n\r\n")) != NULL) {
+		if (NULL != (dt = strstr(dp->dp_buf, "\r\n\r\n"))) {
 			*dt = 0;
 			dt += 4;
 			dp->dp_nrd -= (strlen(dp->dp_buf) + 4);
@@ -106,7 +106,7 @@ int dlpart_recv_header(struct dlpart *dp)
 			return -1;
 
 #define RANGE	"Content-Range: bytes "
-		if ((p = strstr(dp->dp_buf, RANGE)) != NULL) {
+		if (NULL != (p = strstr(dp->dp_buf, RANGE))) {
 			start = strtol(p + sizeof(RANGE) - 1, &ep, 10);
 			if  (ep && *ep == '-')
 				end = strtol(ep + 1, NULL, 10);
@@ -117,10 +117,7 @@ int dlpart_recv_header(struct dlpart *dp)
 		printf("response range error: %ld-%ld (%ld-%ld)\n", start, end, dp->dp_start, dp->dp_end);
 		return -1;
 	}
-		/*err_exit(0, "Invalid range: bytes=%ld-%ld", start, end);*/
 
-	//dp->dp_start = start;
-	//dp->dp_end = end;
 	/* FUCKING THE IMPLEMENTATION OF STRNCPY! try using memcpy() instead.
 	 * strncpy(dp->dp_buf, dt, dp->dp_nrd);
 	 */
@@ -199,7 +196,7 @@ struct dlpart *dlpart_new(struct dlinfo *dl, ssize_t start, ssize_t end, int no)
 {
 	struct dlpart *dp;
 
-	if ((dp = (struct dlpart *)malloc(sizeof(*dp))) == NULL)
+	if (NULL == (dp = (struct dlpart *)malloc(sizeof(*dp))))
 		return NULL;
 
 	memset(dp, 0, sizeof(*dp));

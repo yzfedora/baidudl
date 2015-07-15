@@ -32,7 +32,7 @@ void _err_exit(int flags, int err, char *fmt, ...)
 	strcat(buf, fmt);
 	/* If errno is not zero, print the suitable string for errno */
 	if (err != 0) {
-		if (fmt != NULL && *fmt)
+		if (NULL != fmt && *fmt)
 			strcat(buf, ": ");
 		strcat(buf, strerror(err));
 	}

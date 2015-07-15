@@ -26,7 +26,7 @@ int retcode(char *s)
 	char *p, *ep;
 	int code;
 
-	if ((p = strchr(s, ' ')) != NULL) {
+	if (NULL != (p = strchr(s, ' '))) {
 		p += 1;
 		code = strtol(p, &ep, 10);
 		return code;

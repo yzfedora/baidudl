@@ -30,6 +30,7 @@ static void usage(const char *progname)
 		fprintf(stderr, "Usage: %s [option] url\n", progname);
 	fprintf(stderr,
 		"    -n threads   specify the number of thread to download\n"
+		"    -o filename  specify the filename of output\n"
 		"    -h	          display the help\n\n");
 	exit(EXIT_FAILURE);
 }
@@ -38,14 +39,18 @@ static void usage(const char *progname)
 int main(int argc, char *argv[])
 {
 	int opt, nthreads = 5;	/* default using 4 threads to download */
+	char *filename = NULL;
 	struct dlinfo *dl;
 
-	while ((opt = getopt(argc, argv, "n:h")) != -1) {
+	while ((opt = getopt(argc, argv, "n:o:h")) != -1) {
 		switch (opt) {
 		case 'n':
 			/* for some reason: pan.baidu.com support 5 maximum
 			 * connection to download. */
 			nthreads = strtol(optarg, NULL, 10);
+			break;
+		case 'o':
+			filename = optarg;
 			break;
 		case 'h':
 		default:
@@ -56,7 +61,7 @@ int main(int argc, char *argv[])
 	if (argc != optind + 1)
 		usage(argv[0]);
 
-	if ((dl = dlinfo_new(argv[optind], nthreads)) == NULL)
+	if (NULL == (dl = dlinfo_new(argv[optind], filename, nthreads)))
 		return -1;
 
 	dl->launch(dl);
