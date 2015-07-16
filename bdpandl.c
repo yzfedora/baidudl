@@ -45,8 +45,6 @@ int main(int argc, char *argv[])
 	while ((opt = getopt(argc, argv, "n:o:h")) != -1) {
 		switch (opt) {
 		case 'n':
-			/* for some reason: pan.baidu.com support 5 maximum
-			 * connection to download. */
 			nthreads = strtol(optarg, NULL, 10);
 			break;
 		case 'o':

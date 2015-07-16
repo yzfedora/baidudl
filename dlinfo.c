@@ -544,7 +544,7 @@ void dlinfo_delete(struct dlinfo *dl)
 		free(dt->dp);
 		dt = dt->next;
 	}
-	free(dt);
+	free(dl);
 }
 
 struct dlinfo *dlinfo_new(char *url, char *filename, int nthreads)
