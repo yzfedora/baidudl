@@ -541,7 +541,8 @@ void dlinfo_delete(struct dlinfo *dl)
 	if (close(dl->di_local) == -1)
 		err_msg(errno, "close");
 	while (NULL != dt) {
-		free(dt->dp);
+		if (NULL != dt->dp)
+			free(dt->dp);
 		dt = dt->next;
 	}
 	free(dl);
