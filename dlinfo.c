@@ -409,22 +409,22 @@ static void *download(void *arg)
 	int btimes = 0;	/* block times */
 	int orig_no;
 	ssize_t orig_start, orig_end;
-	struct dlpart *dp = (struct dlpart *)arg;
-	struct dlinfo *dl = dp->dp_info;
+	struct dlpart **dp = (struct dlpart **)arg;
+	struct dlinfo *dl = (*dp)->dp_info;
 
 
 	/*printf("\nthreads %ld starting to download range: %ld-%ld\n",
-			(long)pthread_self(), dp->dp_start, dp->dp_end);*/
+			(long)pthread_self(), (*dp)->dp_start, (*dp)->dp_end);*/
 
 	/* write remaining data in the header. */
-	dp->write(dp, &total_read, &bytes_per_sec);
-	while (dp->dp_start < dp->dp_end) {
-		dp->read(dp);
+	(*dp)->write(*dp, &total_read, &bytes_per_sec);
+	while ((*dp)->dp_start < (*dp)->dp_end) {
+		(*dp)->read((*dp));
 
 		/*
 		 * If errno is EAGAIN or EWOULDBLOCK, it is a due to error.
 		 */
-		if (dp->dp_nrd == -1) {
+		if ((*dp)->dp_nrd == -1) {
 			if (errno == EAGAIN || errno == EWOULDBLOCK) {
 				if (btimes++ > 20)
 					goto try_connect_again;
@@ -433,26 +433,26 @@ static void *download(void *arg)
 			}
 
 			err_msg(errno, "read");
-		} else if (dp->dp_nrd == 0) {
+		} else if ((*dp)->dp_nrd == 0) {
 			/*
 			 * Sava download range, delete the old dp pointer.
 			 * and try to etablish a new connection which
-			 * returned by the dp->dp_remote.
+			 * returned by the (*dp)->dp_remote.
 			 */
 try_connect_again:
 			btimes = 0;
-			orig_start = dp->dp_start;
-			orig_end = dp->dp_end;
-			orig_no = dp->dp_no;
-			dp->delete(dp);
+			orig_start = (*dp)->dp_start;
+			orig_end = (*dp)->dp_end;
+			orig_no = (*dp)->dp_no;
+			(*dp)->delete(*dp);
 
-			dp = dlpart_new(dl, orig_start, orig_end, orig_no);
-			if (NULL == dp)
+			*dp = dlpart_new(dl, orig_start, orig_end, orig_no);
+			if (NULL == *dp)
 				err_exit(errno, "dlpart_new");
 		}
 
 		btimes = 0;
-		dp->write(dp, &total_read, &bytes_per_sec);
+		(*dp)->write(*dp, &total_read, &bytes_per_sec);
 
 	}
 
@@ -514,7 +514,7 @@ void dlinfo_launch(struct dlinfo *dl)
 	dt = dl->di_threads;
 	while (NULL != dt) {
 		if ((s = pthread_create(&dt->thread, NULL, download,
-						dt->dp)) != 0)
+						&dt->dp)) != 0)
 			err_exit(s, "pthread_create");
 		dt = dt->next;
 	}
@@ -541,8 +541,9 @@ void dlinfo_delete(struct dlinfo *dl)
 	if (close(dl->di_local) == -1)
 		err_msg(errno, "close");
 	while (NULL != dt) {
-		if (NULL != dt->dp)
-			free(dt->dp);
+		if (NULL != dt->dp) {
+			dt->dp->delete(dt->dp);
+		}
 		dt = dt->next;
 	}
 	free(dl);
