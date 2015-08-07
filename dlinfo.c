@@ -140,9 +140,8 @@ static void dlinfo_filename_decode(struct dlinfo *dl)
 	}
 	s[j] = 0;
 
-	printf("Filename: %s, Length: %ld\n", dl->di_filename,
-		(long)dl->di_length);
-	//strcpy(s, tmp);
+	/*printf("Filename: %s, Length: %ld\n", dl->di_filename,
+		(long)dl->di_length);*/
 }
 
 /*
@@ -195,6 +194,12 @@ static void dlinfo_recv_and_parsing(struct dlinfo *dl)
 		if (NULL == p)
 			err_msg(errno, "memccpy");
 
+	}
+
+	/* if filename parsing failed, then parsing filename from url. */
+	p = strrchr(dl->di_url, '/');
+	if (NULL != p) {
+		strcpy(dl->di_filename, p + 1);
 	}
 }
 
@@ -502,9 +507,6 @@ void dlinfo_launch(struct dlinfo *dl)
 		dlinfo_range_generator(dl);
 	}
 
-	/* start to create download threads. */
-	printf("launching %d threads to download...\n", dl->di_nthreads);
-	
 	/* Before we create threads to start download, we set the download
 	 * prompt first. and set the alarm too. */
 	dlinfo_set_prompt(dl);
