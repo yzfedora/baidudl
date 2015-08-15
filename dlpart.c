@@ -125,12 +125,13 @@ int dlpart_recv_header(struct dlpart *dp)
 			start = strtol(p + sizeof(RANGE) - 1, &ep, 10);
 			if  (ep && *ep == '-')
 				end = strtol(ep + 1, NULL, 10);
+
+			if (start != dp->dp_start || end != dp->dp_end) {
+				err_exit(0, "response range error: %ld-%ld "
+					 "(%ld-%ld)\n",
+					 start, end, dp->dp_start, dp->dp_end);
+			}
 		}
-	}
-	
-	if (start != dp->dp_start || end != dp->dp_end) {
-		printf("response range error: %ld-%ld (%ld-%ld)\n", start, end, dp->dp_start, dp->dp_end);
-		return -1;
 	}
 
 	/* FUCKING THE IMPLEMENTATION OF STRNCPY! try using memcpy() instead.
