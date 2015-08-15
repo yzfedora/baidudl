@@ -16,7 +16,8 @@
 #ifndef _DLCOMMON_H
 #define _DLCOMMON_H
 
-int retcode(char *s);
+int getrcode(char *s);
+char *geturi(const char *s, const char *u);
 void nwrite(int fd, const void *buf, unsigned int len);
 
 #endif

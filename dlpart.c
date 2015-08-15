@@ -28,6 +28,7 @@
 #include "dlcommon.h"
 #include "err_handler.h"
 
+#define	DLPART_NEW_TIMES	20
 static pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
 
 
@@ -64,11 +65,12 @@ try_pwrite_range_end:
 void dlpart_send_header(struct dlpart *dp)
 {
 	char sbuf[DLPART_BUFSZ];
+	struct dlinfo *dl = dp->dp_info;
 
 	sprintf(sbuf,	"GET %s HTTP/1.1\n"
 			"Host: %s\n"
 			"Range: bytes=%ld-%ld\r\n\r\n",
-			dp->dp_info->di_url, dp->dp_info->di_host,
+			geturi(dl->di_url, dl->di_host), dp->dp_info->di_host,
 			(long)dp->dp_start, (long)dp->dp_end);
 
 #ifdef __DEBUG__
@@ -81,6 +83,7 @@ void dlpart_send_header(struct dlpart *dp)
 
 int dlpart_recv_header(struct dlpart *dp)
 {
+	struct dlinfo *dl = dp->dp_info;
 	int is_header = 1, code;
 	ssize_t start, end;
 	char *dt, *p, *ep;
@@ -101,9 +104,21 @@ int dlpart_recv_header(struct dlpart *dp)
 				"%s\n-----------------------------------\n",
 				dp->dp_start, dp->dp_end, dp->dp_buf);
 #endif
-		/* Range request should return 206 code */
-		if ((code = retcode(dp->dp_buf)) != 206)
+		/* multi-thread download, the response code should be 206. */
+		code = getrcode(dp->dp_buf);
+		if (dl->di_nthreads > 1 && code != 206) {
+			if (200 == code )
+				err_exit(0, "Host: %s does not support "
+					    "multi-thread download.\n"
+					    "try option '-n 1' again.\n",
+					    dl->di_host);
 			return -1;
+		}
+
+		/* single thread download, response code should be 200. */
+		if (dl->di_nthreads == 1 && code != 200)
+			return -1;
+
 
 #define RANGE	"Content-Range: bytes "
 		if (NULL != (p = strstr(dp->dp_buf, RANGE))) {
@@ -194,6 +209,7 @@ void dlpart_delete(struct dlpart *dp)
 
 struct dlpart *dlpart_new(struct dlinfo *dl, ssize_t start, ssize_t end, int no)
 {
+	unsigned int try_times = 0;
 	struct dlpart *dp;
 
 	if (NULL == (dp = (struct dlpart *)malloc(sizeof(*dp))))
@@ -216,6 +232,9 @@ try_sendhdr_again:
 
 	dp->sendhdr(dp);
 	if (dp->recvhdr(dp) == -1) {
+		if (try_times > DLPART_NEW_TIMES)
+			return NULL;
+
 		if (close(dp->dp_remote) == -1)
 			err_msg(errno, "close");
 

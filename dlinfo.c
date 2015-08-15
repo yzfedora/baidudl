@@ -41,7 +41,8 @@ static ssize_t total,
 
 
 /*
- * Initial the service and host of the server.
+ * Initial the service and host of the server. parsed url exclude the trailing
+ * '/' character.
  */
 static char *dlinfo_init(struct dlinfo *dl)
 {
@@ -53,7 +54,7 @@ static char *dlinfo_init(struct dlinfo *dl)
 	if (NULL == start) {
 		start = url;
 	} else {	/* parsing service name	*/
-		memccpy(dl->di_serv, url, ':', 64);
+		memccpy(dl->di_serv, url, ':', DLINFO_SRV_SZ);
 		*(dl->di_serv + strlen(dl->di_serv) - 1) = 0;
 		start += 3;
 	}
@@ -63,8 +64,6 @@ static char *dlinfo_init(struct dlinfo *dl)
 		end = url + strlen(url);
 
 	strncpy(ret, start, end - start);
-	
-	debug("ret: %s\n", ret);
 	return ret;
 }
 
@@ -154,7 +153,7 @@ static void dlinfo_send_request(struct dlinfo *dl)
 
 	sprintf(buf,	"HEAD %s HTTP/1.0\n"
 			"Host: %s\r\n\r\n",
-			dl->di_url, dl->di_host);
+			geturi(dl->di_url, dl->di_host), dl->di_host);
 	nwrite(dl->di_remote, buf, strlen(buf));
 }
 
@@ -171,8 +170,11 @@ static void dlinfo_recv_and_parsing(struct dlinfo *dl)
 		err_exit(errno, "read");
 
 	buf[n] = 0;
+	debug("-------------------Received HEAD info-----------------\n"
+	      "%s\n", buf);
+
 	/* response code valid range [200-300) */
-	code = retcode(buf);
+	code = getrcode(buf);
 	if (code < 200 || code >= 300) {
 		err_exit(0, "HEAD request receive unknown code %d", code);
 	}
@@ -191,9 +193,9 @@ static void dlinfo_recv_and_parsing(struct dlinfo *dl)
 	if (NULL != (p = strstr(buf, _FILENAME))) {
 		p = memccpy(dl->di_filename, p + sizeof(_FILENAME) - 1,
 				'\n', 256);
-		if (NULL == p)
-			err_msg(errno, "memccpy");
-
+		if (p)
+			return;
+		err_msg(errno, "memccpy");
 	}
 
 	/* if filename parsing failed, then parsing filename from url. */

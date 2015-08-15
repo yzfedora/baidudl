@@ -18,10 +18,12 @@
 #include <string.h>
 #include <errno.h>
 #include "dlcommon.h"
+#include "dlinfo.h"
 #include "err_handler.h"
 
 
-int retcode(char *s)
+/* Get the return code. used to checking validity. */
+int getrcode(char *s)
 {
 	char *p, *ep;
 	int code;
@@ -32,6 +34,19 @@ int retcode(char *s)
 		return code;
 	}
 	return -1;
+}
+
+/* return a pointer to start of URI on success, or no any URI can be find,
+ * NULL will be returned. */
+char *geturi(const char *s, const char *u)
+{
+	char *p = strstr(s, u);
+
+	if (!p)
+		return NULL;
+
+	p += strlen(u);
+	return p;
 }
 
 void nwrite(int fd, const void *buf, unsigned int len)
