@@ -417,8 +417,13 @@ static void *download(void *arg)
 	int orig_no;
 	ssize_t orig_start, orig_end;
 	struct dlpart **dp = (struct dlpart **)arg;
-	struct dlinfo *dl = (*dp)->dp_info;
+	struct dlinfo *dl = (dp && *dp) ? (*dp)->dp_info : NULL;
 
+
+	/* this situation will only happen in recovery records, and
+	 * encountered the partial ranges are download finished. */
+	if (!dp || !*dp)
+		return NULL;
 
 	/*printf("\nthreads %ld starting to download range: %ld-%ld\n",
 			(long)pthread_self(), (*dp)->dp_start, (*dp)->dp_end);*/
