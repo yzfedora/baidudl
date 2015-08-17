@@ -262,6 +262,7 @@ static ssize_t dlinfo_records_recovery_all(struct dlinfo *dl)
 		if (NULL == *dt) {
 			if (NULL == (*dt = malloc(sizeof(**dt))))
 				err_exit(errno, "malloc");
+			memset(*dt, 0, sizeof(**dt));
 		}
 
 		dlinfo_records_recovery(dl, &start, sizeof(start));
