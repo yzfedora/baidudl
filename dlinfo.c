@@ -348,17 +348,18 @@ dlinfo_open_local_file_return:
  */
 static char *dlinfo_set_prompt(struct dlinfo *dl)
 {
-		int flags = 1;
-		ssize_t size;
+		short flags = 0;
+		ssize_t size, orig_size;
 		
-		size = total;
-		while (size > 1024) { size >>= 10; flags <<= 1; }
-		sprintf(prompt, "download : %s, size %ld%s ",
-			dl->di_filename, size,
-			(flags == 1) ? "Bytes" :
-			(flags == 2) ? "KB" :
-			(flags == 4) ? "MB" :
-			(flags == 8) ? "GB" :
+		orig_size = size = total;
+		while (size > 1024) { size >>= 10; flags++; }
+		sprintf(prompt, "download : %s, size %.1f%s ",
+			dl->di_filename,
+			orig_size / ((double)(1 << (10 * flags))),
+			(flags == 0) ? "Bytes" :
+			(flags == 1) ? "KB" :
+			(flags == 2) ? "MB" :
+			(flags == 3) ? "GB" :
 			"TB");
 		return prompt;
 }
