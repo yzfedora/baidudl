@@ -157,7 +157,7 @@ static void dlinfo_send_request(struct dlinfo *dl)
 
 	/* not using HEAD request, sometime HEAD will produce 400 error. */
 	sprintf(buf,	"GET %s HTTP/1.1\r\n"
-			"Host: %s\r\n\r\n"
+			"Host: %s\r\n\r\n",
 			geturi(dl->di_url, dl->di_host), dl->di_host);
 	nwrite(dl->di_remote, buf, strlen(buf));
 	debug("------------------ Send Requst,1 ----------------------\n%s",
