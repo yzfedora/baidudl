@@ -34,6 +34,7 @@
 /* Using to print the progress, percent... of download info */
 #define	DLINFO_PROMPT_SZ	1024
 int dorecovery;
+int try_ignore_records;
 static char prompt[DLINFO_PROMPT_SZ];
 static ssize_t	total,
 		total_read,
@@ -166,13 +167,14 @@ static void dlinfo_send_request(struct dlinfo *dl)
  * Receive the response from the server, which include the HEAD info. And
  * store result to dl->di_length, dl->di_filename.
  */
-static void dlinfo_recv_and_parsing(struct dlinfo *dl)
+static int dlinfo_recv_and_parsing(struct dlinfo *dl)
 {
 	int n, code;
 	char buf[DLINFO_RCV_SZ], *p;
 
-	if ((n = read(dl->di_remote, buf, DLINFO_RCV_SZ - 1)) == -1)
-		err_exit(errno, "read");
+	/* any error or end-of-file will cause parsing header fails */
+	if ((n = read(dl->di_remote, buf, DLINFO_RCV_SZ - 1)) <= 0)
+		return -1;
 
 	buf[n] = 0;
 	debug("-------------------Received HEAD info-----------------\n"
@@ -180,9 +182,9 @@ static void dlinfo_recv_and_parsing(struct dlinfo *dl)
 
 	/* response code valid range [200-300) */
 	code = getrcode(buf);
-	if (code < 200 || code >= 300) {
-		err_exit(0, "HEAD request receive unknown code %d", code);
-	}
+	if (code < 200 || code >= 300)
+		return -1;
+
 
 #define _CONTENT_LENGTH	"Content-Length: "
 	if (NULL != (p = strstr(buf, _CONTENT_LENGTH))) {
@@ -192,22 +194,21 @@ static void dlinfo_recv_and_parsing(struct dlinfo *dl)
 	
 	/* User specified filename */
 	if (dl->di_filename && *dl->di_filename)
-		return;
+		return 0;
 
 #define _FILENAME	"filename="
-	if (NULL != (p = strstr(buf, _FILENAME))) {
+	if ((p = strstr(buf, _FILENAME))) {
 		p = memccpy(dl->di_filename, p + sizeof(_FILENAME) - 1,
 				'\n', 256);
-		if (p)
-			return;
+		if (p) return 0;
 		err_msg(errno, "memccpy");
 	}
 
 	/* if filename parsing failed, then parsing filename from url. */
-	p = strrchr(dl->di_url, '/');
-	if (NULL != p) {
+	if ((p = strrchr(dl->di_url, '/')))
 		strcpy(dl->di_filename, p + 1);
-	}
+
+	return 0;
 }
 
 /*
@@ -228,10 +229,11 @@ static int dlinfo_download_is_finished(struct dlinfo *dl)
 	return (real == dl->di_length) ? 1 : 0;
 }
 
-static void dlinfo_records_recovery_nthreads(struct dlinfo *dl)
+static int dlinfo_records_recovery_nthreads(struct dlinfo *dl)
 {
 	ssize_t filelen = lseek(dl->di_local, 0, SEEK_END);
 	ssize_t recordlen;
+	int save_nthreads = dl->di_nthreads;
 
 	/* seek to the start of the records. and retriving number of threads.*/
 	lseek(dl->di_local, dl->di_length, SEEK_SET);
@@ -243,12 +245,14 @@ static void dlinfo_records_recovery_nthreads(struct dlinfo *dl)
 	recordlen = dl->di_nthreads * 2 * sizeof(ssize_t) +
 			sizeof(dl->di_nthreads);
 
-	printf("File: %ld bytes, Records: %ld bytes, Real: %ld bytes\n",
-			dl->di_length, recordlen, filelen);
 
-	if (dl->di_length + recordlen != filelen)
-		err_exit(0, "can't recovery the file: %s, unmatched record"
-				"length", dl->di_filename);
+	/* unrecognized record format, setting try_ignore_records flags */
+	if (dl->di_length + recordlen != filelen) {
+		dl->di_nthreads = save_nthreads;
+		try_ignore_records = 1;
+		return -1;
+	}
+	return 0;
 }
 
 /*
@@ -261,7 +265,8 @@ static ssize_t dlinfo_records_recovery_all(struct dlinfo *dl)
 	ssize_t start, end, nedl = 0;
 	struct dlthreads **dt = &dl->di_threads;
 
-	dlinfo_records_recovery_nthreads(dl);
+	if (dlinfo_records_recovery_nthreads(dl) == -1)
+		return -1;
 	
 	/* this isn't necessary, but for a non-dependencies impl. */
 	lseek(dl->di_local, dl->di_length + sizeof(dl->di_nthreads), SEEK_SET);
@@ -381,6 +386,7 @@ static char *dlinfo_set_prompt(struct dlinfo *dl)
 	filename_dyn = filename_len - 30 + 1;
 
 	filename_fnm = dl->di_filename;
+	sig_cnt = 0;
 
 	return prompt;
 }
@@ -396,7 +402,7 @@ static void dlinfo_set_prompt_dyn(void)
 			filename_fnm + (sig_cnt % filename_dyn));
 	
 	/* recovery the ' ', because of it be set to 0 by sprintf */
-	prompt[40] = ' ';
+	prompt[40] = ',';
 	sig_cnt++;
 }
 
@@ -434,6 +440,12 @@ static void dlinfo_register_alarm_handler(void)
 		err_exit(errno, "sigaction");
 }
 
+static void dlinfo_alarm_detach(void)
+{
+	if (setitimer(ITIMER_REAL, NULL, NULL) == -1)
+		err_msg(errno, "setitimer");
+}
+
 static void dlinfo_alarm_launch(void)
 {
 	struct itimerval new;
@@ -444,7 +456,7 @@ static void dlinfo_alarm_launch(void)
 	new.it_value.tv_usec = 0;
 
 	if (setitimer(ITIMER_REAL, &new, NULL) == -1)
-		err_exit(errno, "setitimer");
+		err_msg(errno, "setitimer");
 }
 
 /*
@@ -477,7 +489,7 @@ static void *download(void *arg)
 		 */
 		if ((*dp)->dp_nrd == -1) {
 			if (errno == EAGAIN || errno == EWOULDBLOCK) {
-				if (btimes++ > 20)
+				if (btimes++ > 30)
 					goto try_connect_again;
 				sleep(1);
 				continue;
@@ -498,8 +510,9 @@ try_connect_again:
 			(*dp)->delete(*dp);
 
 			*dp = dlpart_new(dl, orig_start, orig_end, orig_no);
+			/* if *dp is NULL, occur fatal error. */
 			if (NULL == *dp)
-				err_exit(errno, "dlpart_new");
+				return NULL;
 		}
 
 		btimes = 0;
@@ -510,7 +523,7 @@ try_connect_again:
 	return NULL;
 }
 
-static void dlinfo_range_generator(struct dlinfo *dl)
+static int dlinfo_range_generator(struct dlinfo *dl)
 {
 	int i;
 	ssize_t pos = 0, size = dl->di_length / dl->di_nthreads;
@@ -524,7 +537,7 @@ static void dlinfo_range_generator(struct dlinfo *dl)
 		 */
 		if (NULL == *dt) {
 			if (NULL == (*dt = malloc(sizeof(**dt))))
-				err_exit(errno, "malloc");
+				return -1;
 		}
 
 		start = pos;
@@ -532,12 +545,13 @@ static void dlinfo_range_generator(struct dlinfo *dl)
 				(pos + size - 1) : (dl->di_length - 1);
 		pos += size;
 
-		if (NULL == ((*dt)->dp = dlpart_new(dl, start, end, i)))
-			err_exit(errno, "malloc");
-
 		(*dt)->next = NULL;
+		if (NULL == ((*dt)->dp = dlpart_new(dl, start, end, i)))
+			return -1;
+
 		dt = &((*dt)->next);
 	}
+	return 0;
 }
 
 void dlinfo_launch(struct dlinfo *dl)
@@ -545,6 +559,7 @@ void dlinfo_launch(struct dlinfo *dl)
 	int s;
 	struct dlthreads *dt;
 
+dlinfo_launch_start:
 	/* Set offset of the file to the start of records, and recovery
 	 * number of threads to dl->di_nthreads. */
 	if (dorecovery) {
@@ -553,9 +568,12 @@ void dlinfo_launch(struct dlinfo *dl)
 		if (dlinfo_download_is_finished(dl))
 			return;
 
-		dlinfo_records_recovery_all(dl);
+		/* can't recovery records normally, try NOT use records again */
+		if (dlinfo_records_recovery_all(dl) == -1)
+			goto dlinfo_launch_again;
 	} else {
-		dlinfo_range_generator(dl);
+		if (dlinfo_range_generator(dl) == -1)
+			return;
 	}
 
 	/* Before we create threads to start download, we set the download
@@ -583,16 +601,30 @@ void dlinfo_launch(struct dlinfo *dl)
 	}
 
 	dlinfo_alarm_handler(SIGALRM);
+	dlinfo_alarm_detach();
 	dlinfo_records_removing(dl);	/* Removing trailing records */
 	printf("\n");
+	return;
+
+dlinfo_launch_again:
+	if (try_ignore_records) {
+		try_ignore_records = 0;
+		dorecovery = 0;
+		if (close(dl->di_local) == -1)	err_msg(errno, "close");
+		if (remove(dl->di_filename) == -1) err_msg(errno, "remove");
+		dlinfo_open_local_file(dl);
+		goto dlinfo_launch_start;
+	}
 }
 
 void dlinfo_delete(struct dlinfo *dl)
 {
 	struct dlthreads *dt = dl->di_threads;
 
-	if (close(dl->di_local) == -1)
+	/* close the local file descriptor */
+	if (dl->di_local >= 0 && close(dl->di_local) == -1)
 		err_msg(errno, "close");
+	
 	while (NULL != dt) {
 		if (NULL != dt->dp) {
 			dt->dp->delete(dt->dp);
@@ -607,10 +639,12 @@ struct dlinfo *dlinfo_new(char *url, char *filename, int nthreads)
 	struct dlinfo *dl;
 
 	if (NULL != (dl = (struct dlinfo *)malloc(sizeof(*dl)))) {
-		dorecovery = 0;	/* reset this flags for each download */
 		total = 0;
 		total_read = 0;
 		bytes_per_sec = 0;
+		dorecovery = 0;	/* reset this flags for each download */
+		try_ignore_records = 0;
+
 		memset(dl, 0, sizeof(*dl));
 		strcpy(dl->di_serv, "http");	/* default port number	*/
 		strcpy(dl->di_url, url);
@@ -629,16 +663,21 @@ struct dlinfo *dlinfo_new(char *url, char *filename, int nthreads)
 		dlinfo_init(dl);
 		dl->di_remote = dlinfo_connect(dl);
 		dlinfo_send_request(dl);
-		dlinfo_recv_and_parsing(dl);
+		if (dlinfo_recv_and_parsing(dl) == -1)
+			goto dlinfo_new_failure;
+
 		dlinfo_filename_decode(dl);
 		dlinfo_open_local_file(dl);
 
 		total = dl->di_length;/* Set global variable 'total' */
-		if (close(dl->di_remote) == -1)/* close temporary connection */
-			err_exit(errno, "close");
+		/* close temporary connection */
+		if (close(dl->di_remote) == -1)
+			goto dlinfo_new_failure;
 
 		return dl;
 	}
 
+dlinfo_new_failure:
+	dl->delete(dl);
 	return NULL;	/* create the object of struct download failed */
 }

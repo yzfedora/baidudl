@@ -41,8 +41,10 @@ static void download_from_url(char *url, char *filename, int nts)
 {
 	struct dlinfo *dl;
 
-	if (!(dl = dlinfo_new(url, filename, nts)))
-		err_exit(errno, "Start to download failed.");
+	if (!(dl = dlinfo_new(url, filename, nts))) {
+		err_msg(0, "failed to download from url: %s", url);
+		return;
+	}
 
 	dl->launch(dl);
 	dl->delete(dl);
@@ -61,6 +63,7 @@ static void download_from_file(const char *listfile, int nts)
 		err_exit(errno, "failed to open list file: %s", listfile);
 
 	while (1) {
+		errno = 0;	/* ensure no effects by other calls */
 		num = getline(&lineptr, &max, list);
 		if (num == -1) {
 			if (!errno)

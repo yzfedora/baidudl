@@ -14,6 +14,7 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  *************************************************************************/
 #define _POSIX_C_SOURCE	200809L
+#define _DEFAULT_SOURCE
 #include <sys/types.h>
 #include <stdio.h>
 #include <unistd.h>
@@ -28,7 +29,7 @@
 #include "dlcommon.h"
 #include "err_handler.h"
 
-#define	DLPART_NEW_TIMES	20
+#define	DLPART_NEW_TIMES	512
 static pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
 
 
@@ -108,7 +109,7 @@ int dlpart_recv_header(struct dlpart *dp)
 		code = getrcode(dp->dp_buf);
 		if (dl->di_nthreads > 1 && code != 206) {
 			if (200 == code )
-				err_exit(0, "Host: %s does not support "
+				err_msg(0, "Host: %s does not support "
 					    "multi-thread download.\n"
 					    "try option '-n 1' again.\n",
 					    dl->di_host);
@@ -127,9 +128,10 @@ int dlpart_recv_header(struct dlpart *dp)
 				end = strtol(ep + 1, NULL, 10);
 
 			if (start != dp->dp_start || end != dp->dp_end) {
-				err_exit(0, "response range error: %ld-%ld "
+				err_msg(0, "response range error: %ld-%ld "
 					 "(%ld-%ld)\n",
 					 start, end, dp->dp_start, dp->dp_end);
+				return -1;
 			}
 		}
 	}
@@ -213,7 +215,7 @@ struct dlpart *dlpart_new(struct dlinfo *dl, ssize_t start, ssize_t end, int no)
 	unsigned int try_times = 0;
 	struct dlpart *dp;
 
-	if (NULL == (dp = (struct dlpart *)malloc(sizeof(*dp))))
+	if (!(dp = (struct dlpart *)malloc(sizeof(*dp))))
 		return NULL;
 
 	memset(dp, 0, sizeof(*dp));
@@ -228,12 +230,13 @@ struct dlpart *dlpart_new(struct dlinfo *dl, ssize_t start, ssize_t end, int no)
 	dp->delete = dlpart_delete;
 
 try_sendhdr_again:
+	usleep(500000);	/* sleep 0.1s, waiting server... for some situation */
 	dp->dp_start = start;
 	dp->dp_end = end;
 
 	dp->sendhdr(dp);
 	if (dp->recvhdr(dp) == -1) {
-		if (try_times > DLPART_NEW_TIMES)
+		if (try_times++ > DLPART_NEW_TIMES)
 			return NULL;
 
 		if (close(dp->dp_remote) == -1)
