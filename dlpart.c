@@ -60,16 +60,16 @@ try_pwrite_range_end:
 
 
 /* HTTP Header format:
- * 	GET url\r\n HTTP/1.1\r\n
- * 	Range: bytes=x-y
+ * 	GET url HTTP/1.1\r\n
+ * 	Range: bytes=x-y\r\n
  */
 void dlpart_send_header(struct dlpart *dp)
 {
 	char sbuf[DLPART_BUFSZ];
 	struct dlinfo *dl = dp->dp_info;
 
-	sprintf(sbuf,	"GET %s HTTP/1.1\n"
-			"Host: %s\n"
+	sprintf(sbuf,	"GET %s HTTP/1.1\r\n"
+			"Host: %s\r\n"
 			"Range: bytes=%ld-%ld\r\n\r\n",
 			geturi(dl->di_url, dl->di_host), dp->dp_info->di_host,
 			(long)dp->dp_start, (long)dp->dp_end);

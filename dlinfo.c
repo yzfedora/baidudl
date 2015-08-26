@@ -155,8 +155,9 @@ static void dlinfo_send_request(struct dlinfo *dl)
 {
 	char buf[DLINFO_REQ_SZ];
 
-	sprintf(buf,	"HEAD %s HTTP/1.0\n"
-			"Host: %s\r\n\r\n",
+	/* not using HEAD request, sometime HEAD will produce 400 error. */
+	sprintf(buf,	"GET %s HTTP/1.1\r\n"
+			"Host: %s\r\n\r\n"
 			geturi(dl->di_url, dl->di_host), dl->di_host);
 	nwrite(dl->di_remote, buf, strlen(buf));
 	debug("------------------ Send Requst,1 ----------------------\n%s",
@@ -369,7 +370,7 @@ static char *dlinfo_set_prompt(struct dlinfo *dl)
 
 	orig_size = size = total;
 	while (size > 1024) { size >>= 10; flags++; }
-	sprintf(prompt, "download: %.30s, size %.1f%s ",
+	sprintf(prompt, "download: %-30.30s      %.1f%s ",
 		dl->di_filename,
 		orig_size / ((double)(1 << (10 * flags))),
 		(flags == 0) ? "Bytes" :

@@ -7,7 +7,7 @@ CC	= gcc
 ALL: $(PROGS)
 
 debug: ALL
-debug: FLAGS+=-g
+debug: FLAGS+=-g -D__DEBUG__
 
 %.o: %.c
 	$(CC) -c $^ $(FLAGS)
