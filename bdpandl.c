@@ -13,6 +13,8 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  *************************************************************************/
+#define _POSIX_C_SOURCE 200809L
+#define _GNU_SOURCE	/* both for glibc version 2.10.0 before and later */
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -35,14 +37,56 @@ static void usage(const char *progname)
 	exit(EXIT_FAILURE);
 }
 
+static void download_from_url(char *url, char *filename, int nts)
+{
+	struct dlinfo *dl;
+
+	if (!(dl = dlinfo_new(url, filename, nts)))
+		err_exit(errno, "Start to download failed.");
+
+	dl->launch(dl);
+	dl->delete(dl);
+}
+
+/* we assuming will procucts the correct output filename, so here ignore it. */
+static void download_from_file(const char *listfile, int nts)
+{
+#define CONFIG_LINE_MAX	4096
+	FILE *list;
+	char *lineptr = malloc(CONFIG_LINE_MAX);
+	size_t max = CONFIG_LINE_MAX;
+	ssize_t num = 0;
+
+	if (!(list = fopen(listfile, "r")))
+		err_exit(errno, "failed to open list file: %s", listfile);
+
+	while (1) {
+		num = getline(&lineptr, &max, list);
+		if (num == -1) {
+			if (!errno)
+				break;	/* end-of-file */
+			continue;
+		}
+		
+		if (lineptr[num - 1] == '\n')
+			lineptr[num - 1] = 0;
+
+		/* when this call be down, try next to download */
+		download_from_url(lineptr, NULL, nts);
+	}
+
+	free(lineptr);
+	if (fclose(list))
+		err_exit(errno, "failed to close list file: %s", listfile);
+}
 
 int main(int argc, char *argv[])
 {
 	int opt, nthreads = 5;	/* default using 4 threads to download */
 	char *filename = NULL;
-	struct dlinfo *dl;
+	char *listfile = NULL;	/* which stored the download list */
 
-	while ((opt = getopt(argc, argv, "n:o:h")) != -1) {
+	while ((opt = getopt(argc, argv, "n:o:l:h")) != -1) {
 		switch (opt) {
 		case 'n':
 			nthreads = strtol(optarg, NULL, 10);
@@ -50,20 +94,24 @@ int main(int argc, char *argv[])
 		case 'o':
 			filename = optarg;
 			break;
+		case 'l':
+			listfile = optarg;
+			break;
 		case 'h':
 		default:
 			usage(argv[0]);
 		}
 	}
 
-	if (argc != optind + 1)
+	if ((!listfile && (argc != optind + 1)) ||
+			(listfile && (argc != optind)))
 		usage(argv[0]);
 
-	if (NULL == (dl = dlinfo_new(argv[optind], filename, nthreads)))
-		return -1;
-
-	dl->launch(dl);
-	dl->delete(dl);
+	if (!listfile) {
+		download_from_url(argv[optind], filename, nthreads);
+	} else {
+		download_from_file(listfile, nthreads);
+	}
 
 	return 0;
 }

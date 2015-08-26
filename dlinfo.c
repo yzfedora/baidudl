@@ -35,10 +35,13 @@
 #define	DLINFO_PROMPT_SZ	1024
 int dorecovery;
 static char prompt[DLINFO_PROMPT_SZ];
-static ssize_t total,
-	       total_read,
-	       bytes_per_sec;
-
+static ssize_t	total,
+		total_read,
+		bytes_per_sec;
+static long	sig_cnt;
+static size_t	filename_len,
+		filename_dyn;
+static char	*filename_fnm;	/* point to temporary used file name */
 
 /*
  * Initial the service and host of the server. parsed url exclude the trailing
@@ -155,6 +158,8 @@ static void dlinfo_send_request(struct dlinfo *dl)
 			"Host: %s\r\n\r\n",
 			geturi(dl->di_url, dl->di_host), dl->di_host);
 	nwrite(dl->di_remote, buf, strlen(buf));
+	debug("------------------ Send Requst,1 ----------------------\n%s",
+		buf);
 }
 
 /*
@@ -215,6 +220,12 @@ static void dlinfo_records_recovery(struct dlinfo *dl, void *buf,
 {
 	if (read(dl->di_local, buf, len) != len)
 		err_exit(errno, "records recovery occur errors");
+}
+
+static int dlinfo_download_is_finished(struct dlinfo *dl)
+{
+	ssize_t real = lseek(dl->di_local, 0, SEEK_END);
+	return (real == dl->di_length) ? 1 : 0;
 }
 
 static void dlinfo_records_recovery_nthreads(struct dlinfo *dl)
@@ -348,20 +359,45 @@ dlinfo_open_local_file_return:
  */
 static char *dlinfo_set_prompt(struct dlinfo *dl)
 {
-		short flags = 0;
-		ssize_t size, orig_size;
-		
-		orig_size = size = total;
-		while (size > 1024) { size >>= 10; flags++; }
-		sprintf(prompt, "download : %s, size %.1f%s ",
-			dl->di_filename,
-			orig_size / ((double)(1 << (10 * flags))),
-			(flags == 0) ? "Bytes" :
-			(flags == 1) ? "KB" :
-			(flags == 2) ? "MB" :
-			(flags == 3) ? "GB" :
-			"TB");
-		return prompt;
+	short flags = 0;
+	ssize_t size, orig_size;
+
+	orig_size = size = total;
+	while (size > 1024) { size >>= 10; flags++; }
+	sprintf(prompt, "download: %.30s, size %.1f%s ",
+		dl->di_filename,
+		orig_size / ((double)(1 << (10 * flags))),
+		(flags == 0) ? "Bytes" :
+		(flags == 1) ? "KB" :
+		(flags == 2) ? "MB" :
+		(flags == 3) ? "GB" :
+		"TB");
+
+	/* set this variable used to decision whether dynamically print
+	 * the file name. */
+	filename_len = strlen(dl->di_filename);
+
+	/* 30 indicate the maximum length of file name. */
+	filename_dyn = filename_len - 30 + 1;
+
+	filename_fnm = dl->di_filename;
+
+	return prompt;
+}
+
+/* if dl->di_filename is more than 30 bytes, then dynamically print the
+ * full name of this file. */
+static void dlinfo_set_prompt_dyn(void)
+{
+	if (filename_len <= 30)
+		return;
+
+	sprintf(prompt + 10,/* start position of file name */ "%.30s",
+			filename_fnm + (sig_cnt % filename_dyn));
+	
+	/* recovery the ' ', because of it be set to 0 by sprintf */
+	prompt[40] = ' ';
+	sig_cnt++;
 }
 
 static void dlinfo_alarm_handler(int signo)
@@ -369,6 +405,7 @@ static void dlinfo_alarm_handler(int signo)
 	int flags = 1;
 	ssize_t speed = bytes_per_sec;
 
+	dlinfo_set_prompt_dyn();
 #define PROGRESS_PRINT_WS "                                      "
 	do {
 		speed >>= 10;
@@ -511,6 +548,11 @@ void dlinfo_launch(struct dlinfo *dl)
 	/* Set offset of the file to the start of records, and recovery
 	 * number of threads to dl->di_nthreads. */
 	if (dorecovery) {
+		/* if file has exist, and it's length is equal to bytes
+		 * which need download bytes. so it has download finished. */
+		if (dlinfo_download_is_finished(dl))
+			return;
+
 		dlinfo_records_recovery_all(dl);
 	} else {
 		dlinfo_range_generator(dl);
@@ -540,7 +582,7 @@ void dlinfo_launch(struct dlinfo *dl)
 		dt = dt->next;
 	}
 
-	dlinfo_alarm_handler(0);
+	dlinfo_alarm_handler(SIGALRM);
 	dlinfo_records_removing(dl);	/* Removing trailing records */
 	printf("\n");
 }
@@ -565,6 +607,10 @@ struct dlinfo *dlinfo_new(char *url, char *filename, int nthreads)
 	struct dlinfo *dl;
 
 	if (NULL != (dl = (struct dlinfo *)malloc(sizeof(*dl)))) {
+		dorecovery = 0;	/* reset this flags for each download */
+		total = 0;
+		total_read = 0;
+		bytes_per_sec = 0;
 		memset(dl, 0, sizeof(*dl));
 		strcpy(dl->di_serv, "http");	/* default port number	*/
 		strcpy(dl->di_url, url);
