@@ -1,12 +1,17 @@
 # baidudl
-This is a multi-thread download tool for pan.baidu.com
+This is a multi-thread download tool for linux, it main purpose is used to download from pan.baidu.com. (for Chinese: 这是一个Linux下的多线程下载工具，其初衷是为了用于baidu网盘的多线程下载。初期没有实现对批量下载的地址解析，可能会在以后版本添加更成熟的批量下载方式，但现在您仍需要手动添加地址到一个文件中用于批下载。)
 
 # Usage
 	git clone https://github.com/yzfedora/baidudl.git
 	cd baidudl
 	make
 	make install
+	
+	for single download:
 	bdpandl -n 8 'http://lx.cdn.baidupcs.com/file/...'
+	or your can use batch download, by specify a 'list file'. which is consists by download URLs, and line by line
+	bdpandl -n 10 -l listfile
+	
 
 # Notice
 	The download address is copy from your browser, when you click the
