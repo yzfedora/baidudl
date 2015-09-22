@@ -1,5 +1,5 @@
 PROGS	= bdpandl
-OBJS	= err_handler.o dlinfo.o dlpart.o dlcommon.o
+OBJS	= err_handler.o dlinfo.o dlpart.o dlcommon.o roll_display.o
 FLAGS	= -Wall -lpthread
 CC	= gcc
 

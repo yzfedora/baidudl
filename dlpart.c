@@ -29,7 +29,7 @@
 #include "dlcommon.h"
 #include "err_handler.h"
 
-#define	DLPART_NEW_TIMES	512
+#define	DLPART_NEW_TIMES	60
 static pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
 
 
@@ -68,11 +68,11 @@ void dlpart_send_header(struct dlpart *dp)
 	char sbuf[DLPART_BUFSZ];
 	struct dlinfo *dl = dp->dp_info;
 
-	sprintf(sbuf,	"GET %s HTTP/1.1\r\n"
-			"Host: %s\r\n"
-			"Range: bytes=%ld-%ld\r\n\r\n",
-			geturi(dl->di_url, dl->di_host), dp->dp_info->di_host,
-			(long)dp->dp_start, (long)dp->dp_end);
+	sprintf(sbuf, "GET %s HTTP/1.1\r\n"
+		      "Host: %s\r\n"
+		      "Range: bytes=%ld-%ld\r\n\r\n",
+		      geturi(dl->di_url, dl->di_host), dp->dp_info->di_host,
+		      (long)dp->dp_start, (long)dp->dp_end);
 
 #ifdef __DEBUG__
 	printf("---------------Sending Header(%ld-%ld)----------------\n"
@@ -87,16 +87,16 @@ int dlpart_recv_header(struct dlpart *dp)
 	struct dlinfo *dl = dp->dp_info;
 	int is_header = 1, code;
 	ssize_t start, end;
-	char *dt, *p, *ep;
+	char *sp, *p, *ep;
 
 	while (is_header) {
 		dp->read(dp);
 		if (dp->dp_nrd <= 0)
 			return -1;
 
-		if (NULL != (dt = strstr(dp->dp_buf, "\r\n\r\n"))) {
-			*dt = 0;
-			dt += 4;
+		if (NULL != (sp = strstr(dp->dp_buf, "\r\n\r\n"))) {
+			*sp = 0;
+			sp += 4;
 			dp->dp_nrd -= (strlen(dp->dp_buf) + 4);
 			is_header = 0;
 		}
@@ -137,9 +137,9 @@ int dlpart_recv_header(struct dlpart *dp)
 	}
 
 	/* FUCKING THE IMPLEMENTATION OF STRNCPY! try using memcpy() instead.
-	 * strncpy(dp->dp_buf, dt, dp->dp_nrd);
+	 * strncpy(dp->dp_buf, sp, dp->dp_nrd);
 	 */
-	memmove(dp->dp_buf, dt, dp->dp_nrd);
+	memmove(dp->dp_buf, sp, dp->dp_nrd);
 	return 0;
 }
 
@@ -230,7 +230,7 @@ struct dlpart *dlpart_new(struct dlinfo *dl, ssize_t start, ssize_t end, int no)
 	dp->delete = dlpart_delete;
 
 try_sendhdr_again:
-	usleep(500000);	/* sleep 0.1s, waiting server... for some situation */
+	usleep(100000);	/* sleep 0.1s, waiting server... for some situation */
 	dp->dp_start = start;
 	dp->dp_end = end;
 

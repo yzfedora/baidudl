@@ -18,7 +18,7 @@
 #include <sys/types.h>
 #include "dlinfo.h"
 
-#define DLPART_BUFSZ	(1024 * 128)
+#define DLPART_BUFSZ	(1024 * 1024)
 
 struct dlpart {
 	int	dp_no;

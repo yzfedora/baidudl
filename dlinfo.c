@@ -30,6 +30,7 @@
 #include "dlpart.h"
 #include "dlcommon.h"
 #include "err_handler.h"
+#include "roll_display.h"
 
 /* Using to print the progress, percent... of download info */
 #define	DLINFO_PROMPT_SZ	1024
@@ -40,10 +41,9 @@ static ssize_t	total,
 		total_read,
 		bytes_per_sec;
 static long	sig_cnt;
-static size_t	filename_len,
-		filename_dyn;
-static char	*filename_fnm;	/* point to temporary used file name */
 
+
+static void *download(void *arg);
 /*
  * Initial the service and host of the server. parsed url exclude the trailing
  * '/' character.
@@ -262,7 +262,7 @@ static int dlinfo_records_recovery_nthreads(struct dlinfo *dl)
  */
 static ssize_t dlinfo_records_recovery_all(struct dlinfo *dl)
 {
-	int i;
+	int i, s;
 	ssize_t start, end, nedl = 0;
 	struct dlthreads **dt = &dl->di_threads;
 
@@ -301,6 +301,10 @@ static ssize_t dlinfo_records_recovery_all(struct dlinfo *dl)
 		if (NULL == ((*dt)->dp = dlpart_new(dl, start, end, i)))
 			err_exit(errno, "malloc");
 		
+		if ((s = pthread_create(&(*dt)->thread, NULL, download,
+						&(*dt)->dp)) != 0)
+			err_exit(s, "pthread_create");
+
 		nedl += (end - start);
 next_range:
 		dt = &((*dt)->next);
@@ -370,8 +374,8 @@ static char *dlinfo_set_prompt(struct dlinfo *dl)
 
 	orig_size = size = total;
 	while (size > 1024) { size >>= 10; flags++; }
-	sprintf(prompt, "download: %-30.30s      %.1f%s ",
-		dl->di_filename,
+	snprintf(prompt, sizeof(prompt),
+		"\e[7mDownload: %-48s%.1f%s ", "",
 		orig_size / ((double)(1 << (10 * flags))),
 		(flags == 0) ? "Bytes" :
 		(flags == 1) ? "KB" :
@@ -379,16 +383,9 @@ static char *dlinfo_set_prompt(struct dlinfo *dl)
 		(flags == 3) ? "GB" :
 		"TB");
 
-	/* set this variable used to decision whether dynamically print
-	 * the file name. */
-	filename_len = strlen(dl->di_filename);
-
-	/* 30 indicate the maximum length of file name. */
-	filename_dyn = filename_len - 30 + 1;
-
-	filename_fnm = dl->di_filename;
+	/* Initial roll displayed string, and expect maximum length. */
+	roll_display_init(dl->di_filename, 30);
 	sig_cnt = 0;
-
 	return prompt;
 }
 
@@ -396,14 +393,12 @@ static char *dlinfo_set_prompt(struct dlinfo *dl)
  * full name of this file. */
 static void dlinfo_set_prompt_dyn(void)
 {
-	if (filename_len <= 30)
-		return;
+	int len;
+	char *ptr = roll_display_ptr(&len);
 
-	sprintf(prompt + 10,/* start position of file name */ "%.30s",
-			filename_fnm + (sig_cnt % filename_dyn));
-	
-	/* recovery the ' ', because of it be set to 0 by sprintf */
-	prompt[40] = ',';
+	memset(prompt + 14, ' ', 48);
+	snprintf(prompt + 14, sizeof(prompt) - 14, "%.*s", len, ptr);
+	prompt[strlen(prompt)] = ' ';
 	sig_cnt++;
 }
 
@@ -419,7 +414,8 @@ static void dlinfo_alarm_handler(int signo)
 		flags <<= 1;
 	} while (speed > 1024);
 	printf("\r"PROGRESS_PRINT_WS PROGRESS_PRINT_WS);
-	printf("\r[%-60s  %4ld%s/s %5.1f%%]", prompt,
+	
+	printf("\r%s %4ld%s/s %5.1f%%\e[0m", prompt,
 			(long)speed,
 			(flags == 2) ? "KB" :
 			(flags == 4) ? "MB" : "GB",
@@ -526,7 +522,7 @@ try_connect_again:
 
 static int dlinfo_range_generator(struct dlinfo *dl)
 {
-	int i;
+	int i, s;
 	ssize_t pos = 0, size = dl->di_length / dl->di_nthreads;
 	ssize_t start, end;
 	struct dlthreads **dt = &dl->di_threads;
@@ -549,6 +545,10 @@ static int dlinfo_range_generator(struct dlinfo *dl)
 		(*dt)->next = NULL;
 		if (NULL == ((*dt)->dp = dlpart_new(dl, start, end, i)))
 			return -1;
+		
+		if ((s = pthread_create(&(*dt)->thread, NULL, download,
+						&(*dt)->dp)) != 0)
+			err_exit(s, "pthread_create");
 
 		dt = &((*dt)->next);
 	}
@@ -559,6 +559,13 @@ void dlinfo_launch(struct dlinfo *dl)
 {
 	int s;
 	struct dlthreads *dt;
+	
+	/* Before we create threads to start download, we set the download
+	 * prompt first. and set the alarm too. */
+	dlinfo_set_prompt(dl);
+	dlinfo_register_alarm_handler();
+	dlinfo_alarm_launch();
+
 
 dlinfo_launch_start:
 	/* Set offset of the file to the start of records, and recovery
@@ -576,20 +583,14 @@ dlinfo_launch_start:
 		if (dlinfo_range_generator(dl) == -1)
 			return;
 	}
-
-	/* Before we create threads to start download, we set the download
-	 * prompt first. and set the alarm too. */
-	dlinfo_set_prompt(dl);
-	dlinfo_register_alarm_handler();
-	dlinfo_alarm_launch();
-
-	dt = dl->di_threads;
+	
+	/*dt = dl->di_threads;
 	while (NULL != dt) {
 		if ((s = pthread_create(&dt->thread, NULL, download,
 						&dt->dp)) != 0)
 			err_exit(s, "pthread_create");
 		dt = dt->next;
-	}
+	}*/
 
 	/* Waiting the threads that we are created above. */
 	dt = dl->di_threads;
