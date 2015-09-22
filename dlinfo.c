@@ -375,7 +375,7 @@ static char *dlinfo_set_prompt(struct dlinfo *dl)
 	orig_size = size = total;
 	while (size > 1024) { size >>= 10; flags++; }
 	snprintf(prompt, sizeof(prompt),
-		"\e[7mDownload: %-48s%.1f%s ", "",
+		"\e[7mDownload: %-45s%.1f%s ", "",
 		orig_size / ((double)(1 << (10 * flags))),
 		(flags == 0) ? "Bytes" :
 		(flags == 1) ? "KB" :
@@ -396,7 +396,7 @@ static void dlinfo_set_prompt_dyn(void)
 	int len;
 	char *ptr = roll_display_ptr(&len);
 
-	memset(prompt + 14, ' ', 48);
+	memset(prompt + 14, ' ', 45);
 	snprintf(prompt + 14, sizeof(prompt) - 14, "%.*s", len, ptr);
 	prompt[strlen(prompt)] = ' ';
 	sig_cnt++;
@@ -408,12 +408,11 @@ static void dlinfo_alarm_handler(int signo)
 	ssize_t speed = bytes_per_sec;
 
 	dlinfo_set_prompt_dyn();
-#define PROGRESS_PRINT_WS "                                      "
 	do {
 		speed >>= 10;
 		flags <<= 1;
 	} while (speed > 1024);
-	printf("\r"PROGRESS_PRINT_WS PROGRESS_PRINT_WS);
+	printf("\r""%80s", "");
 	
 	printf("\r%s %4ld%s/s %5.1f%%\e[0m", prompt,
 			(long)speed,
