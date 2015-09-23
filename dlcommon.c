@@ -72,7 +72,8 @@ void nwrite(int fd, const void *buf, unsigned int len)
  */
 char *string_decode(char *src)
 {
-	char tmp[DLINFO_NAME_MAX], *s = src;
+#define ENCODE_NAME_MAX	(NAME_MAX * 3 + 1)
+	char tmp[ENCODE_NAME_MAX], *s = src;
 	int i, j, k, t;
 
 	/* strip the double-quotes */
@@ -86,6 +87,7 @@ char *string_decode(char *src)
 	}
 	tmp[j] = 0;
 
+	s = src;
 	for (i = j = k = 0; tmp[i]; i++, j++) {
 		if (tmp[i] == '%') {
 			/* following 2 bytes is hex-decimal of a char */

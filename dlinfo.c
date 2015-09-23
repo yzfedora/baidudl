@@ -34,9 +34,12 @@
 
 /* Using to print the progress, percent... of download info */
 #define	DLINFO_PROMPT_SZ	1024
-int dorecovery;
-int try_ignore_records;
+static int dorecovery;
+static int try_ignore_records;
+static int threads_num;	/* Number of current threads doing download() */
+static int threads_total;
 static char prompt[DLINFO_PROMPT_SZ];
+static char prompt_size[16];	/* File size string. */
 static ssize_t	total,
 		total_read,
 		bytes_per_sec;
@@ -237,6 +240,9 @@ static ssize_t dlinfo_records_recovery_all(struct dlinfo *dl)
 	if (dlinfo_records_recovery_nthreads(dl) == -1)
 		return -1;
 	
+	/* Initial the number of all threads */
+	threads_total = dl->di_nthreads;
+	
 	/* this isn't necessary, but for a non-dependencies impl. */
 	lseek(dl->di_local, dl->di_length + sizeof(dl->di_nthreads), SEEK_SET);
 	for (i = 0; i < dl->di_nthreads; i++) {
@@ -342,8 +348,8 @@ static char *dlinfo_set_prompt(struct dlinfo *dl)
 
 	orig_size = size = total;
 	while (size > 1024) { size >>= 10; flags++; }
-	snprintf(prompt, sizeof(prompt),
-		"\e[7mDownload: %-45s%.1f%s ", "",
+	snprintf(prompt, sizeof(prompt), "\e[7mDownload: ");
+	snprintf(prompt_size, sizeof(prompt_size), "%.1f%s ",
 		orig_size / ((double)(1 << (10 * flags))),
 		(flags == 0) ? "Bytes" :
 		(flags == 1) ? "KB" :
@@ -364,9 +370,8 @@ static void dlinfo_set_prompt_dyn(void)
 	int len;
 	char *ptr = roll_display_ptr(&len);
 
-	memset(prompt + 14, ' ', 45);
-	snprintf(prompt + 14, sizeof(prompt) - 14, "%.*s", len, ptr);
-	prompt[strlen(prompt)] = ' ';
+	snprintf(prompt + 14, sizeof(prompt) - 14, "%.*s%5s%s", len, ptr,
+			"", prompt_size);
 	sig_cnt++;
 }
 
@@ -382,11 +387,12 @@ static void dlinfo_alarm_handler(int signo)
 	} while (speed > 1024);
 	printf("\r""%80s", "");
 	
-	printf("\r%s %4ld%s/s %5.1f%%\e[0m", prompt,
+	printf("\r%s %4ld%s/s %5.1f%%\e[31m[%d/%d]\e[0m", prompt,
 			(long)speed,
 			(flags == 2) ? "KB" :
 			(flags == 4) ? "MB" : "GB",
-			((float)total_read / total) * 100);
+			((float)total_read / total) * 100,
+			threads_num, threads_total);
 
 	fflush(stdout);
 	bytes_per_sec = 0;
@@ -440,6 +446,7 @@ static void *download(void *arg)
 	if (!dp || !*dp)
 		return NULL;
 
+	threads_num++;		/* Global download threads statistics. */
 	/*printf("\nthreads %ld starting to download range: %ld-%ld\n",
 			(long)pthread_self(), (*dp)->dp_start, (*dp)->dp_end);*/
 
@@ -484,6 +491,7 @@ try_connect_again:
 
 	}
 
+	threads_num--;
 	return NULL;
 }
 
@@ -494,6 +502,8 @@ static int dlinfo_range_generator(struct dlinfo *dl)
 	ssize_t start, end;
 	struct dlthreads **dt = &dl->di_threads;
 
+	/* Initial the number of all threads */
+	threads_total = dl->di_nthreads;
 	for (i = 0; i < dl->di_nthreads; i++) {
 		/*
 		 * if dt is second pointer in the linked, dt = dt->next.
@@ -510,8 +520,11 @@ static int dlinfo_range_generator(struct dlinfo *dl)
 		pos += size;
 
 		(*dt)->next = NULL;
-		if (NULL == ((*dt)->dp = dlpart_new(dl, start, end, i)))
+		if (NULL == ((*dt)->dp = dlpart_new(dl, start, end, i))) {
+			err_msg(0, "Can't establish partial download "
+				   "connection");
 			return -1;
+		}
 		
 		if ((s = pthread_create(&(*dt)->thread, NULL, download,
 						&(*dt)->dp)) != 0)
@@ -611,6 +624,8 @@ struct dlinfo *dlinfo_new(char *url, char *filename, int nthreads)
 		total = 0;
 		total_read = 0;
 		bytes_per_sec = 0;
+		threads_num = 0;
+		threads_total = 0;
 		dorecovery = 0;	/* reset this flags for each download */
 		try_ignore_records = 0;
 
