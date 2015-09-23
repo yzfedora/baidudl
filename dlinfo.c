@@ -112,42 +112,6 @@ int dlinfo_connect(struct dlinfo *dl)
 }
 
 /*
- * Used to decode the filename string ''
- */
-static void dlinfo_filename_decode(struct dlinfo *dl)
-{
-	char tmp[DLINFO_NAME_MAX], *s = dl->di_filename;
-	int i, j, k, t;
-
-	/* strip the double-quotes */
-	for (i = j = 0; s[i] != '\r' && s[i+1] != '\n' && s[i]; i++) {
-		if (s[i] != '"')
-			tmp[j++] = s[i];
-	}
-	tmp[j] = 0;
-
-	for (i = j = 0; tmp[i]; i++, j++) {
-		if (tmp[i] == '%') {
-			/* following 2 bytes is hex-decimal of a char */
-			t = tmp[i + 3];
-			tmp[i + 3] = 0;
-
-			k = strtol(tmp + i + 1, NULL, 16);
-			s[j] = (char)k;
-
-			tmp[i + 3] = t;
-			i += 2;
-		} else {
-			s[j] = tmp[i];
-		}
-	}
-	s[j] = 0;
-
-	/*printf("Filename: %s, Length: %ld\n", dl->di_filename,
-		(long)dl->di_length);*/
-}
-
-/*
  * Send HTTP HEAD request to server for retriving the length and filename
  * of the file.
  */
@@ -197,13 +161,17 @@ static int dlinfo_recv_and_parsing(struct dlinfo *dl)
 	if (dl->di_filename && *dl->di_filename)
 		return 0;
 
-#define _FILENAME	"filename="
-	if ((p = strstr(buf, _FILENAME))) {
-		p = memccpy(dl->di_filename, p + sizeof(_FILENAME) - 1,
-				'\n', 256);
-		if (p) return 0;
-		err_msg(errno, "memccpy");
+#define FILENAME	"filename="
+#define BUFFERSZ	(NAME_MAX * 3 + 1)
+	if ((p = strstr(buf, FILENAME))) {
+		char tmp[BUFFERSZ];
+		p = memccpy(tmp, p + sizeof(FILENAME) - 1, '\n', BUFFERSZ);
+		if (!p) { err_msg(errno, "memccpy"); return -1; }
+		strncpy(dl->di_filename, string_decode(tmp), DLINFO_NAME_MAX);
+		return 0;
 	}
+#undef FILENAME
+#undef BUFFERSZ
 
 	/* if filename parsing failed, then parsing filename from url. */
 	if ((p = strrchr(dl->di_url, '/')))
@@ -310,7 +278,7 @@ next_range:
 		dt = &((*dt)->next);
 	}
 
-	total_read = total - nedl;
+	total_read += total - nedl;
 	return total_read;
 }
 
@@ -667,7 +635,6 @@ struct dlinfo *dlinfo_new(char *url, char *filename, int nthreads)
 		if (dlinfo_recv_and_parsing(dl) == -1)
 			goto dlinfo_new_failure;
 
-		dlinfo_filename_decode(dl);
 		dlinfo_open_local_file(dl);
 
 		total = dl->di_length;/* Set global variable 'total' */

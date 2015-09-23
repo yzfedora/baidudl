@@ -66,3 +66,44 @@ void nwrite(int fd, const void *buf, unsigned int len)
 		buf += n;
 	}
 }
+
+/*
+ * Used to decode the filename string ''
+ */
+char *string_decode(char *src)
+{
+	char tmp[DLINFO_NAME_MAX], *s = src;
+	int i, j, k, t;
+
+	/* strip the double-quotes */
+	for (i = j = k = 0; s[i] && s[i] != '\r' && s[i+1] != '\n'; i++) {
+		if (s[i] != '"')
+			tmp[j++] = s[i];
+		else {
+			if (2 == ++k)
+				break;
+		}
+	}
+	tmp[j] = 0;
+
+	for (i = j = k = 0; tmp[i]; i++, j++) {
+		if (tmp[i] == '%') {
+			/* following 2 bytes is hex-decimal of a char */
+			t = tmp[i + 3];
+			tmp[i + 3] = 0;
+
+			k = strtol(tmp + i + 1, NULL, 16);
+			s[j] = (char)k;
+
+			tmp[i + 3] = t;
+			i += 2;
+		} else {
+			s[j] = tmp[i];
+		}
+	}
+	s[j] = 0;
+
+	/*printf("Filename: %s, Length: %ld\n", dl->di_filename,
+		(long)dl->di_length);*/
+	return s;
+}
