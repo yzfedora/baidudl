@@ -293,7 +293,7 @@ static ssize_t dlinfo_records_recovery_all(struct dlinfo *dl)
 					&(*dt)->dp)) != 0)
 			err_exit(s, "pthread_create");
 
-		nedl += (end - start);
+		nedl += (end - start) + 1;
 next_range:
 		dt = &((*dt)->next);
 	}
