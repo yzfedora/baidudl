@@ -19,5 +19,5 @@
 int getrcode(char *s);
 char *geturi(const char *s, const char *u);
 void nwrite(int fd, const void *buf, unsigned int len);
-
+char *string_decode(char *src);
 #endif

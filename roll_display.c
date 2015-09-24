@@ -4,12 +4,15 @@
 # include <unistd.h>
 # include <stdlib.h>
 #endif
+#include <string.h>
 #include "roll_display.h"
 
 static char *roll_display_orig;
 static char *roll_display_curr;
-static int roll_display_window_size;
-static int roll_display_length_max;
+static int roll_display_window_size;	/* Window size of display. */
+static int roll_display_length_max;	/* Total used width of display.
+					   (ascii use 1, non-ascii use 2) */
+static int roll_display_orig_size;	/* Length of the original string. */
 
 static int utf8_char_length(char *utf)
 {
@@ -23,37 +26,47 @@ static int utf8_char_length(char *utf)
 	return (ulen ? ulen : 1);
 }
 
-void roll_display_init(char *s, int length)
+int roll_display_init(char *s, int window_size)
 {
+	if (!s || window_size <= 0)
+		return -1;
 	char *ptr = s;
 	int tmp;
 
 	roll_display_orig = s;
 	roll_display_curr = s;
-	roll_display_window_size = length;
+	roll_display_window_size = window_size;
+	roll_display_orig_size = strlen(s);
 	
 	while (*ptr) {
 		tmp = utf8_char_length(ptr);
 		roll_display_length_max += (1 == tmp? 1 : 2) ;
 		ptr += tmp;
 	}
+	return 0;
 }
 
 /* Return a pointer to start of current string, and set the suitable maximum
  * of can be displayed.(*len <= roll_display_window_size) */
-char *roll_display_ptr(int *len)
+char *roll_display_ptr(int *len, int *padding)
 {
+	*len = *padding = 0;
 	if (roll_display_length_max <= roll_display_window_size) {
-		*len = roll_display_length_max;
+		if (len)
+			*len = roll_display_orig_size;
+
+		if (padding)
+			*padding = roll_display_window_size -
+						roll_display_length_max;
 		return roll_display_orig;
 	}
 
 	char *ret = roll_display_curr;
 	char *tmp = roll_display_curr;
-	int l = 0, t;
+	int l = 0;
+	int t;
 
 	/* Assume non-ascii characters use 2 width of ascii to display. */
-	*len = 0;
 	while (l < roll_display_window_size && *tmp) {
 		t = utf8_char_length(tmp);
 		l += (1 == t) ? 1 : 2;
@@ -66,6 +79,9 @@ char *roll_display_ptr(int *len)
 	 * specified '*len' */
 	if (l > roll_display_window_size) {
 		*len -= t;
+		l -= (1 == t) ? 1 : 2;
+		if (padding)
+			*padding = roll_display_window_size - l;
 	}
 
 	if (likely(*tmp))

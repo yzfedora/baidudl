@@ -41,10 +41,11 @@ static pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
 static void dlpart_update(struct dlpart *dp)
 {
 	struct dlinfo *dl = dp->dp_info;
-	int ret, local = dl->di_local;
-	typeof (dp->dp_start) start = dp->dp_start,
-	       	end = dp->dp_end,
-		offset = dl->di_length + sizeof(dl->di_nthreads) +
+	int ret;
+	int local = dl->di_local;
+	typeof(dp->dp_start) start = dp->dp_start;
+	typeof(dp->dp_end) end = dp->dp_end;
+	ssize_t offset = dl->di_length + sizeof(dl->di_nthreads) +
 			sizeof(start) * dp->dp_no * 2;
 
 try_pwrite_range_start:
@@ -229,10 +230,11 @@ struct dlpart *dlpart_new(struct dlinfo *dl, ssize_t start, ssize_t end, int no)
 	dp->write = dlpart_write;
 	dp->delete = dlpart_delete;
 
-try_sendhdr_again:
-	usleep(100000);	/* sleep 0.1s, waiting server... for some situation */
 	dp->dp_start = start;
 	dp->dp_end = end;
+	dlpart_update(dp);	/* Force to write the record into end of file*/
+try_sendhdr_again:
+	usleep(100000);	/* sleep 0.1s, waiting server... for some situation */
 
 	dp->sendhdr(dp);
 	if (dp->recvhdr(dp) == -1) {
