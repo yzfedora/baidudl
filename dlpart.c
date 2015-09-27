@@ -29,7 +29,7 @@
 #include "dlcommon.h"
 #include "err_handler.h"
 
-#define	DLPART_NEW_TIMES	60
+#define	DLPART_NEW_TIMES	120
 static pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
 
 
@@ -108,18 +108,13 @@ int dlpart_recv_header(struct dlpart *dp)
 #endif
 		/* multi-thread download, the response code should be 206. */
 		code = getrcode(dp->dp_buf);
-		if (dl->di_nthreads > 1 && code != 206) {
-			if (200 == code )
-				err_msg(0, "Host: %s does not support "
-					    "multi-thread download.\n"
-					    "try option '-n 1' again.\n",
-					    dl->di_host);
+		if (code != 206 && code != 200) {
 			return -1;
+		} else if (code == 200 && dl->di_nthreads != 1) {
+			err_msg(0, "Host: %s does not support multi-thread "
+				   "download.\n try option '-n 1' again.\n",
+				    dl->di_host);
 		}
-
-		/* single thread download, response code should be 200. */
-		if (dl->di_nthreads == 1 && code != 200)
-			return -1;
 
 
 #define RANGE	"Content-Range: bytes "
@@ -234,8 +229,6 @@ struct dlpart *dlpart_new(struct dlinfo *dl, ssize_t start, ssize_t end, int no)
 	dp->dp_end = end;
 	dlpart_update(dp);	/* Force to write the record into end of file*/
 try_sendhdr_again:
-	usleep(100000);	/* sleep 0.1s, waiting server... for some situation */
-
 	dp->sendhdr(dp);
 	if (dp->recvhdr(dp) == -1) {
 		if (try_times++ > DLPART_NEW_TIMES)

@@ -38,7 +38,6 @@ static int dorecovery;
 static int try_ignore_records;
 static int threads_num;		/* Number of current threads doing download() */
 static int threads_total;
-static int threads_real;	/* real number of threads launched. */
 static char prompt[DLINFO_PROMPT_SZ];
 static char prompt_size[16];	/* File size string. */
 static ssize_t total, total_read, bytes_per_sec;
@@ -273,14 +272,15 @@ static ssize_t dlinfo_records_recovery_all(struct dlinfo *dl)
 			 * if this range is finished, set 'dt->thread' and
 			 * 'dt->dp both to 0 or NULL properly'.
 			 */
-			if (start == end + 1) {
-				threads_total--;
-				(*dt)->thread = 0;
-				(*dt)->dp = NULL;
-				goto next_range;
-			}
-			err_exit(0, "recovery error range: %ld-%ld\n",
-				 start, end);
+			if (start != end + 1)
+				err_exit(0, "recovery error range: %ld-%ld\n",
+					    start, end);
+			/* Set members of *dt to 0 or NULL. subtract 1 for
+			 * finished part. */
+			(*dt)->thread = 0;
+			(*dt)->dp = NULL;
+			threads_total--;
+			goto next_range;
 		}
 
 		if (!((*dt)->dp = dlpart_new(dl, start, end, i))) {
@@ -472,7 +472,6 @@ static void *download(void *arg)
 		return NULL;
 
 	threads_num++;		/* Global download threads statistics. */
-	threads_real++;
 	/*printf("\nthreads %ld starting to download range: %ld-%ld\n",
 	   (long)pthread_self(), (*dp)->dp_start, (*dp)->dp_end); */
 
@@ -508,17 +507,19 @@ try_connect_again:
 			(*dp)->delete(*dp);
 
 			*dp = dlpart_new(dl, orig_start, orig_end, orig_no);
-			if (!*dp) {
-				/* download is not accomplished. */
-				threads_real--;
+			if (!*dp)
 				goto out;
-			}
 		}
 
 		btimes = 0;
 		(*dp)->write(*dp, &total_read, &bytes_per_sec);
 
 	}
+	
+	/* Subtract the current finished thread. because following line is put
+	 * in the front of 'threads_num--', this may cause 'threads_num'
+	 * greater thant 'threads_total' at a moment. */
+	threads_total--;
 out:
 	threads_num--;
 	return NULL;
@@ -618,7 +619,7 @@ dlinfo_launch_start:
 
 	dlinfo_sigalrm_handler(SIGALRM);
 	dlinfo_sigalrm_detach();
-	if (threads_real == threads_total)
+	if (0 == threads_total)
 		dlinfo_records_removing(dl);	/* Removing trailing records */
 	printf("\n");
 	return;
