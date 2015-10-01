@@ -19,8 +19,7 @@
 #include <limits.h>
 #include "dlpart.h"
 
-
-#define	DLINFO_REQ_SZ	4096
+#define DLINFO_REQ_SZ	4096
 #define DLINFO_RCV_SZ	(1024 * 128)
 #define DLINFO_SRV_SZ	64
 #define DLINFO_HST_SZ	512
@@ -28,10 +27,41 @@
 #define DLINFO_NAME_MAX	(NAME_MAX + 1)
 
 struct dlthreads {
-	pthread_t thread;
-	struct dlpart *dp;
-	struct dlthreads *next;
+	pthread_t		thread;
+	struct dlpart		*dp;
+	struct dlthreads	*next;
 };
+
+/* Used to packet following parameters into a structure. */
+struct packet_args {
+	struct dlinfo	*arg_dl;
+	struct dlpart	**arg_dp;/* saved address of dp, used in download(). */
+	ssize_t		arg_start;
+	ssize_t		arg_end;
+	int		arg_no;
+};
+
+#define PACKET_ARGS(pkt, dl, dp, start, end, no) 	\
+	do {						\
+		if ((pkt = malloc(sizeof(*(pkt))))) {	\
+			(pkt)->arg_dl = dl;		\
+			(pkt)->arg_dp = dp;		\
+			(pkt)->arg_start = start;	\
+			(pkt)->arg_end = end;		\
+			(pkt)->arg_no = no;		\
+		}					\
+	} while (0)
+
+#define UNPACKET_ARGS(pkt, dl, dp, start, end, no)	\
+	do {						\
+		dl = (pkt)->arg_dl;			\
+		dp = (pkt)->arg_dp;			\
+		start = (pkt)->arg_start;		\
+		end = (pkt)->arg_end;			\
+		no = (pkt)->arg_no;			\
+	} while (0)
+
+#define PACKET_ARGS_FREE(pkt)	do { free(pkt); } while (0)
 
 struct dlinfo {
 	int	di_remote;
@@ -46,7 +76,7 @@ struct dlinfo {
 
 	struct dlthreads *di_threads;
 	
-	int  (*connect)(struct dlinfo *);/* used by dlpart_new */
+	int (*connect)(struct dlinfo *);/* used by dlpart_new */
 	void (*setprompt)(struct dlinfo *);
 	void (*rgstralrm)(void);
 	void (*launch)(struct dlinfo *);

@@ -221,8 +221,8 @@ static int dlinfo_records_recovery_nthreads(struct dlinfo *dl)
 
 	/* calculate the records length. it should be equal the ('filelen' -
 	 * dl->di_length) */
-	recordlen = dl->di_nthreads * 2 * sizeof(ssize_t) +
-	    sizeof(dl->di_nthreads);
+	recordlen = dl->di_nthreads * 2 * sizeof(dl->di_threads->dp->dp_start)
+		+ sizeof(dl->di_nthreads);
 
 
 	/* unrecognized record format, setting try_ignore_records flags */
@@ -255,6 +255,7 @@ static ssize_t dlinfo_records_recovery_all(struct dlinfo *dl)
 	/* this isn't necessary, but for a non-dependencies impl. */
 	lseek(dl->di_local, dl->di_length + sizeof(dl->di_nthreads), SEEK_SET);
 	for (i = 0; i < dl->di_nthreads; i++) {
+		struct packet_args *pkt;
 		/*
 		 * if dt is second pointer in the linked list, dt = dt->next.
 		 * we need to malloc a block memory for it.
@@ -275,15 +276,25 @@ static ssize_t dlinfo_records_recovery_all(struct dlinfo *dl)
 			if (start != end + 1)
 				err_exit(0, "recovery error range: %ld-%ld\n",
 					    start, end);
-			/* Set members of *dt to 0 or NULL. subtract 1 for
-			 * finished part. */
+			/* 
+			 * Set members of *dt to 0 or NULL. subtract 1 for
+			 * finished part.
+			 */
 			(*dt)->thread = 0;
 			(*dt)->dp = NULL;
 			threads_total--;
 			goto next_range;
 		}
 
-		if (!((*dt)->dp = dlpart_new(dl, start, end, i))) {
+		PACKET_ARGS(pkt, dl, &(*dt)->dp, start, end, i);
+		if (!pkt)
+			err_exit(errno, "packet arguments");
+
+		if ((s = pthread_create(&(*dt)->thread, NULL,
+					download, pkt)) != 0)
+			err_exit(s, "pthread_create");
+		
+		/*if (!((*dt)->dp = dlpart_new(dl, start, end, i))) {
 			err_msg(0, "error, try download range: %ld - %ld "
 				   "again", start, end);
 			goto next_range;
@@ -291,7 +302,7 @@ static ssize_t dlinfo_records_recovery_all(struct dlinfo *dl)
 
 		if ((s = pthread_create(&(*dt)->thread, NULL, download,
 					&(*dt)->dp)) != 0)
-			err_exit(s, "pthread_create");
+			err_exit(s, "pthread_create");*/
 
 		nedl += (end - start) + 1;
 next_range:
@@ -462,12 +473,24 @@ static void *download(void *arg)
 	int btimes = 0;		/* block times */
 	int orig_no;
 	ssize_t orig_start, orig_end;
-	struct dlpart **dp = (struct dlpart **) arg;
-	struct dlinfo *dl = (dp && *dp) ? (*dp)->dp_info : NULL;
+	struct dlpart **dp = NULL;
+	struct dlinfo *dl = NULL;
 
+	/* Unpacket the struct packet_args. */
+	UNPACKET_ARGS((struct packet_args *)arg, dl, dp, orig_start,
+			orig_end, orig_no);
+	PACKET_ARGS_FREE((struct packet_args *)arg);
+	
+	if (!(*dp = dlpart_new(dl, orig_start, orig_end, orig_no))) {
+		err_msg(0, "error, try download range: %ld - %ld "
+			   "again", orig_start, orig_end);
+		return NULL;
+	}
 
-	/* this situation will only happen in recovery records, and
-	 * encountered the partial ranges are download finished. */
+	/* 
+	 * this situation will only happen in recovery records, and
+	 * encountered the partial ranges are download finished.
+	 */
 	if (!dp || !*dp)
 		return NULL;
 
@@ -537,6 +560,8 @@ static int dlinfo_range_generator(struct dlinfo *dl)
 	/* Initial the number of all threads */
 	threads_total = dl->di_nthreads;
 	for (i = 0; i < dl->di_nthreads; i++) {
+		struct packet_args *pkt;
+
 		/* if dt is second pointer in the linked, dt = dt->next.
 		 * we need to malloc a block memory for it.
 		 */
@@ -545,26 +570,27 @@ static int dlinfo_range_generator(struct dlinfo *dl)
 				return -1;
 		}
 
+		(*dt)->next = NULL;
 		start = pos;
 		pos += size;
-		end = (i != dl->di_nthreads - 1) ?
-		    (pos - 1) : (dl->di_length - 1);
+		if (i != dl->di_nthreads - 1)
+			end = pos - 1;
+		else
+			end = dl->di_length - 1;
 
-		(*dt)->next = NULL;
-		if (!((*dt)->dp = dlpart_new(dl, start, end, i))) {
-			/* If can't create object of the dlpart structure,
-			 * then, continue to next..., because we need to
-			 * ensure records must be written in, so make its
-			 * records is correct. */
-			err_msg(0, "error, try download range: %ld - %ld "
-				   "again", start, end);
-			goto next_range;
-		}
+		/* 
+		 * Save the arguments which will pass into download().
+		 * especially, the address of (*dt)->dp. this may changed in
+		 * the download() by dlpart_new().
+		 */
+		PACKET_ARGS(pkt, dl, &(*dt)->dp, start, end, i);
+		if (!pkt)
+			err_exit(errno, "packet arguments");
 
 		if ((s = pthread_create(&(*dt)->thread, NULL,
-					download, &(*dt)->dp)) != 0)
+					download, pkt)) != 0)
 			err_exit(s, "pthread_create");
-next_range:
+
 		dt = &((*dt)->next);
 	}
 	return 0;
@@ -599,28 +625,29 @@ dlinfo_launch_start:
 			return;
 	}
 
-	/*dt = dl->di_threads;
-	   while (NULL != dt) {
-	   if ((s = pthread_create(&dt->thread, NULL, download,
-	   &dt->dp)) != 0)
-	   err_exit(s, "pthread_create");
-	   dt = dt->next;
-	   } */
-
 	/* Waiting the threads that we are created above. */
 	dt = dl->di_threads;
 	while (dt) {
-		if (0 != dt->thread && dt->dp) {
+		/*
+		 * Since we put all dlpart_new() into the download(). when
+		 * all pthread_create() done, only ensure the dt->thread is
+		 * set by pthread_create().
+		 */
+		if (dt->thread) {
 			if ((s = pthread_join(dt->thread, NULL)) != 0)
 				err_msg(s, "pthread_join");
 		}
 		dt = dt->next;
 	}
 
+	/* 
+	 * Force the flush the output prompt, and clear the timer, and
+	 * removing the records which we written in the end of file.
+	 */
 	dlinfo_sigalrm_handler(SIGALRM);
 	dlinfo_sigalrm_detach();
 	if (0 == threads_total)
-		dlinfo_records_removing(dl);	/* Removing trailing records */
+		dlinfo_records_removing(dl);
 	printf("\n");
 	return;
 
@@ -680,7 +707,8 @@ struct dlinfo *dlinfo_new(char *url, char *filename, int nthreads)
 		dl->launch = dlinfo_launch;
 		dl->delete = dlinfo_delete;
 
-		/* parsing the url, for remote server's service and hostname.
+		/* 
+		 * parsing the url, for remote server's service and hostname.
 		 * and establish a temporary connection used to send HTTP HEAD
 		 * request, that we can retriving the length and filename.
 		 */

@@ -29,7 +29,7 @@
 #include "dlcommon.h"
 #include "err_handler.h"
 
-#define	DLPART_NEW_TIMES	120
+#define	DLPART_NEW_TIMES	60
 static pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
 
 
@@ -95,7 +95,7 @@ int dlpart_recv_header(struct dlpart *dp)
 		if (dp->dp_nrd <= 0)
 			return -1;
 
-		if (NULL != (sp = strstr(dp->dp_buf, "\r\n\r\n"))) {
+		if ((sp = strstr(dp->dp_buf, "\r\n\r\n"))) {
 			*sp = 0;
 			sp += 4;
 			dp->dp_nrd -= (strlen(dp->dp_buf) + 4);
@@ -149,8 +149,7 @@ void dlpart_read(struct dlpart *dp)
 	if (dp->dp_nrd <= 0)
 		return;
 	
-	dp->dp_buf[dp->dp_nrd] = 0;
-	
+	dp->dp_buf[dp->dp_nrd] = 0;	
 }
 
 /*
@@ -167,14 +166,17 @@ void dlpart_write(struct dlpart *dp, ssize_t *total_read,
 		/*debug("pwrite %d bytes >> fd(%d), offset %ld\n",
 			len, fd, offset);*/
 		n = pwrite(dp->dp_info->di_local, buf, len, dp->dp_start);
-		if (n == -1) {
+		if (n > 0) {
+			len -= n;
+			buf += n;
+			dp->dp_start += n;
+		} else if (n == 0) {
+			err_exit(0, "pwrite end-of-file");
+		} else {
+			if (errno == EINTR)
+				continue;
 			err_msg(errno, "pwrite");
-			continue;
 		}
-		
-		len -= n;
-		buf += n;	
-		dp->dp_start += n;
 	}
 
 	/*
@@ -237,6 +239,7 @@ try_sendhdr_again:
 		if (close(dp->dp_remote) == -1)
 			err_msg(errno, "close");
 
+		usleep(100000);
 		dp->dp_remote = dl->connect(dl);
 		goto try_sendhdr_again;
 	}
