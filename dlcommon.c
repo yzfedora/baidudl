@@ -16,10 +16,10 @@
 #include <unistd.h>
 #include <stdlib.h>
 #include <string.h>
+#include <err_handler.h>
 #include <errno.h>
 #include "dlcommon.h"
 #include "dlinfo.h"
-#include "err_handler.h"
 
 
 /* Get the return code. used to checking validity. */
@@ -57,8 +57,8 @@ void nwrite(int fd, const void *buf, unsigned int len)
 		n = write(fd, buf, len);
 		if (n == -1) {
 			if (errno == EPIPE)
-				err_exit(errno, "nwrite");
-			err_msg(errno, "nwrite");
+				err_exit("nwrite");
+			err_sys("nwrite");
 			continue;
 		}
 			
@@ -105,7 +105,5 @@ char *string_decode(char *src)
 	}
 	s[j] = 0;
 
-	/*printf("Filename: %s, Length: %ld\n", dl->di_filename,
-		(long)dl->di_length);*/
 	return s;
 }

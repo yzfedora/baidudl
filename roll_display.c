@@ -19,6 +19,7 @@
 # include <unistd.h>
 # include <stdlib.h>
 #endif
+
 #include <string.h>
 #include "roll_display.h"
 

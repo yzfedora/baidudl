@@ -25,15 +25,19 @@
 #include <sys/time.h>
 #include <netdb.h>
 #include <errno.h>
+#include <err_handler.h>
 
 #include "dlinfo.h"
 #include "dlpart.h"
 #include "dlcommon.h"
-#include "err_handler.h"
 #include "roll_display.h"
 
-/* Using to print the progress, percent... of download info */
+/* 
+ * Using to print the progress, percent... of download info.
+ */
 #define DLINFO_PROMPT_SZ	1024
+#define DLINFO_TRYTIMES_MAX	30
+
 static int dorecovery;
 static int try_ignore_records;
 static int threads_num;		/* Number of current threads doing download() */
@@ -90,26 +94,25 @@ int dlinfo_connect(struct dlinfo *dl)
 	hints.ai_socktype = SOCK_STREAM;
 
 	if ((s = getaddrinfo(dl->di_host, dl->di_serv, &hints, &res)) != 0)
-		err_exit(0, "getaddrinfo: %s\n", gai_strerror(s));
+		err_exit("getaddrinfo: %s\n", gai_strerror(s));
 
 	for (ai = res; ai; ai = ai->ai_next) {
 		if ((fd = socket(ai->ai_family, ai->ai_socktype,
 				 ai->ai_protocol)) == -1) {
-			err_msg(errno, "socket");
+			err_sys("socket");
 			continue;
 		}
 
 		if (connect(fd, ai->ai_addr, ai->ai_addrlen) == 0)
 			break;
 
-		err_msg(errno, "connect");
+		err_sys("connect");
 		if (close(fd) == -1)
-			err_msg(errno, "close");
-
+			err_sys("close");
 	}
 
 	if (NULL == ai)
-		err_exit(0, "Couldn't connection to: %s\n", dl->di_host);
+		err_exit("Couldn't connection to: %s\n", dl->di_host);
 
 	freeaddrinfo(res);
 	return fd;
@@ -128,8 +131,8 @@ static void dlinfo_send_request(struct dlinfo *dl)
 		"Host: %s\r\n\r\n",
 		geturi(dl->di_url, dl->di_host), dl->di_host);
 	nwrite(dl->di_remote, buf, strlen(buf));
-	debug("------------------ Send Requst,1 -----------"
-	      "-----------\n%s", buf);
+	err_dbg("-------------- Send Requst (Meta info) -----------\n"
+		"%s", buf);
 }
 
 /*
@@ -148,14 +151,13 @@ static int dlinfo_recv_and_parsing(struct dlinfo *dl)
 		return -1;
 
 	buf[n] = 0;
-	debug("-------------------Received HEAD info-----------------\n"
-	      "%s\n", buf);
+	err_dbg("--------------Received Meta info---------------\n"
+		"%s\n", buf);
 
 	/* response code valid range [200-300) */
 	code = getrcode(buf);
 	if (code < 200 || code >= 300)
 		return -1;
-
 
 #define _CONTENT_LENGTH	"Content-Length: "
 	if (NULL != (p = strstr(buf, _CONTENT_LENGTH))) {
@@ -173,7 +175,7 @@ static int dlinfo_recv_and_parsing(struct dlinfo *dl)
 		char tmp[BUFFERSZ];
 		p = memccpy(tmp, p + sizeof(FILENAME) - 1, '\n', BUFFERSZ);
 		if (!p) {
-			err_msg(errno, "memccpy");
+			err_sys("memccpy");
 			return -1;
 		}
 		strncpy(dl->di_filename, string_decode(tmp),
@@ -199,7 +201,7 @@ static void dlinfo_records_recovery(struct dlinfo *dl, void *buf,
 				    ssize_t len)
 {
 	if (read(dl->di_local, buf, len) != len)
-		err_exit(errno, "records recovery occur errors");
+		err_exit("records recovery occur errors");
 }
 
 static int dlinfo_download_is_finished(struct dlinfo *dl)
@@ -262,7 +264,7 @@ static ssize_t dlinfo_records_recovery_all(struct dlinfo *dl)
 		 */
 		if (!*dt) {
 			if (!(*dt = malloc(sizeof(**dt))))
-				err_exit(errno, "malloc");
+				err_exit("malloc");
 			memset(*dt, 0, sizeof(**dt));
 		}
 
@@ -274,7 +276,7 @@ static ssize_t dlinfo_records_recovery_all(struct dlinfo *dl)
 			 * 'dt->dp both to 0 or NULL properly'.
 			 */
 			if (start != end + 1)
-				err_exit(0, "recovery error range: %ld-%ld\n",
+				err_exit("recovery error range: %ld-%ld\n",
 					    start, end);
 			/* 
 			 * Set members of *dt to 0 or NULL. subtract 1 for
@@ -288,22 +290,14 @@ static ssize_t dlinfo_records_recovery_all(struct dlinfo *dl)
 
 		PACKET_ARGS(pkt, dl, &(*dt)->dp, start, end, i);
 		if (!pkt)
-			err_exit(errno, "packet arguments");
+			err_exit("packet arguments");
 
 		if ((s = pthread_create(&(*dt)->thread, NULL,
-					download, pkt)) != 0)
-			err_exit(s, "pthread_create");
-		
-		/*if (!((*dt)->dp = dlpart_new(dl, start, end, i))) {
-			err_msg(0, "error, try download range: %ld - %ld "
-				   "again", start, end);
-			goto next_range;
+					download, pkt)) != 0) {
+			errno = s;
+			err_exit("pthread_create");
 		}
-
-		if ((s = pthread_create(&(*dt)->thread, NULL, download,
-					&(*dt)->dp)) != 0)
-			err_exit(s, "pthread_create");*/
-
+		
 		nedl += (end - start) + 1;
 next_range:
 		dt = &((*dt)->next);
@@ -317,7 +311,7 @@ next_range:
 static void dlinfo_records_removing(struct dlinfo *dl)
 {
 	if (ftruncate(dl->di_local, dl->di_length) == -1)
-		err_exit(errno, "ftruncate");
+		err_exit("ftruncate");
 }
 
 /*
@@ -339,12 +333,12 @@ static int dlinfo_open_local_file(struct dlinfo *dl)
 			flags &= ~O_EXCL;
 			if ((fd =
 			     open(dl->di_filename, flags, PERMS)) == -1)
-				err_exit(errno, "open");
+				err_exit("open");
 
 			dorecovery = 1;
 			goto dlinfo_open_local_file_return;
 		}
-		err_exit(errno, "open");
+		err_exit("open");
 	}
 
 	/* If no file exists, append number of threads records to the file. */
@@ -390,7 +384,7 @@ static char *dlinfo_set_prompt(struct dlinfo *dl)
 	sig_cnt = 0;
 	/* Initial roll displayed string, and expect maximum length. */
 	if (roll_display_init(dl->di_filename, 30) == -1)
-		err_exit(0, "Setting roll display function error");
+		err_exit("Setting roll display function error");
 	return prompt;
 }
 
@@ -438,18 +432,18 @@ static void dlinfo_register_signal_handler(void)
 	act.sa_handler = dlinfo_sigalrm_handler;
 
 	if (sigaction(SIGALRM, &act, &old) == -1)
-		err_exit(errno, "sigaction - SIGALRM");
+		err_exit("sigaction - SIGALRM");
 
 	/*act.sa_handler = dlinfo_sigterm_handler;
 	if (sigaction(SIGTERM, &act, &old) == -1)
-		err_exit(errno, "sigaction - SIGTERM");*/
+		err_exit("sigaction - SIGTERM");*/
 }
 
 
 static void dlinfo_sigalrm_detach(void)
 {
 	if (setitimer(ITIMER_REAL, NULL, NULL) == -1)
-		err_msg(errno, "setitimer");
+		err_sys("setitimer");
 }
 
 static void dlinfo_alarm_launch(void)
@@ -462,7 +456,7 @@ static void dlinfo_alarm_launch(void)
 	new.it_value.tv_usec = 0;
 
 	if (setitimer(ITIMER_REAL, &new, NULL) == -1)
-		err_msg(errno, "setitimer");
+		err_sys("setitimer");
 }
 
 /*
@@ -482,21 +476,14 @@ static void *download(void *arg)
 	PACKET_ARGS_FREE((struct packet_args *)arg);
 	
 	if (!(*dp = dlpart_new(dl, orig_start, orig_end, orig_no))) {
-		err_msg(0, "error, try download range: %ld - %ld "
+		err_sys("error, try download range: %ld - %ld "
 			   "again", orig_start, orig_end);
 		return NULL;
 	}
 
-	/* 
-	 * this situation will only happen in recovery records, and
-	 * encountered the partial ranges are download finished.
-	 */
-	if (!dp || !*dp)
-		return NULL;
-
 	threads_num++;		/* Global download threads statistics. */
-	/*printf("\nthreads %ld starting to download range: %ld-%ld\n",
-	   (long)pthread_self(), (*dp)->dp_start, (*dp)->dp_end); */
+	err_dbg("\nthreads %ld starting to download range: %ld-%ld\n",
+		(long)pthread_self(), (*dp)->dp_start, (*dp)->dp_end);
 
 	/* write remaining data in the header. */
 	(*dp)->write(*dp, &total_read, &bytes_per_sec);
@@ -509,13 +496,13 @@ static void *download(void *arg)
 		 */
 		if ((*dp)->dp_nrd == -1) {
 			if (errno == EAGAIN || errno == EWOULDBLOCK) {
-				if (btimes++ > 30)
+				if (btimes++ > DLINFO_TRYTIMES_MAX)
 					goto try_connect_again;
 				sleep(1);
 				continue;
 			}
 
-			err_msg(errno, "read");
+			err_sys("read");
 		} else if ((*dp)->dp_nrd == 0) {
 			/*
 			 * Sava download range, delete the old dp pointer.
@@ -585,11 +572,13 @@ static int dlinfo_range_generator(struct dlinfo *dl)
 		 */
 		PACKET_ARGS(pkt, dl, &(*dt)->dp, start, end, i);
 		if (!pkt)
-			err_exit(errno, "packet arguments");
+			err_exit("packet arguments");
 
 		if ((s = pthread_create(&(*dt)->thread, NULL,
-					download, pkt)) != 0)
-			err_exit(s, "pthread_create");
+					download, pkt)) != 0) {
+			errno = s;
+			err_exit("pthread_create");
+		}
 
 		dt = &((*dt)->next);
 	}
@@ -634,8 +623,10 @@ dlinfo_launch_start:
 		 * set by pthread_create().
 		 */
 		if (dt->thread) {
-			if ((s = pthread_join(dt->thread, NULL)) != 0)
-				err_msg(s, "pthread_join");
+			if ((s = pthread_join(dt->thread, NULL)) != 0) {
+				errno = s;
+				err_sys("pthread_join");
+			}
 		}
 		dt = dt->next;
 	}
@@ -657,9 +648,9 @@ dlinfo_launch_again:
 		dorecovery = 0;
 
 		if (close(dl->di_local) == -1)
-			err_msg(errno, "close");
+			err_sys("close");
 		if (remove(dl->di_filename) == -1)
-			err_msg(errno, "remove");
+			err_sys("remove");
 
 		dlinfo_open_local_file(dl);
 		goto dlinfo_launch_start;
@@ -672,7 +663,7 @@ void dlinfo_delete(struct dlinfo *dl)
 
 	/* close the local file descriptor */
 	if (dl->di_local >= 0 && close(dl->di_local) == -1)
-		err_msg(errno, "close");
+		err_sys("close");
 
 	while (dt) {
 		if (dt->dp) {
@@ -718,6 +709,8 @@ struct dlinfo *dlinfo_new(char *url, char *filename, int nthreads)
 		if (dlinfo_recv_and_parsing(dl) == -1)
 			goto dlinfo_new_failure;
 
+		err_dbg("filename: %s, length: %ld\n", dl->di_filename,
+			(long)dl->di_length);
 		dlinfo_open_local_file(dl);
 
 		total = dl->di_length;	/* Set global variable 'total' */

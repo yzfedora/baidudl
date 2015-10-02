@@ -25,9 +25,9 @@
 #include <sys/select.h>
 #include <fcntl.h>
 #include <errno.h>
+#include <err_handler.h>
 #include "dlpart.h"
 #include "dlcommon.h"
-#include "err_handler.h"
 
 #define DLPART_NEW_TIMES	120
 static pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
@@ -60,7 +60,8 @@ try_pwrite_range_end:
 }
 
 
-/* HTTP Header format:
+/* 
+ * HTTP Header format:
  * 	GET url HTTP/1.1\r\n
  * 	Range: bytes=x-y\r\n
  */
@@ -75,11 +76,8 @@ void dlpart_send_header(struct dlpart *dp)
 		      geturi(dl->di_url, dl->di_host), dp->dp_info->di_host,
 		      (long)dp->dp_start, (long)dp->dp_end);
 
-#ifdef __DEBUG__
-	printf("---------------Sending Header(%ld-%ld)----------------\n"
-	       "%s------------------------------------------------------\n",
-	       dp->dp_start, dp->dp_end, sbuf);
-#endif
+	err_dbg("\n---------------Sending Header(%ld-%ld)----------------\n"
+		"%s", dp->dp_start, dp->dp_end, sbuf);
 	nwrite(dp->dp_remote, sbuf, strlen(sbuf));
 }
 
@@ -101,19 +99,18 @@ int dlpart_recv_header(struct dlpart *dp)
 			dp->dp_nrd -= (strlen(dp->dp_buf) + 4);
 			is_header = 0;
 		}
-#ifdef __DEBUG__
-		printf("-----------Receiving Heading(%ld-%ld)----------\n"
-		       "%s\n-----------------------------------------------\n",
-		       dp->dp_start, dp->dp_end, dp->dp_buf);
-#endif
+		
+		err_dbg("\n-------------Receiving Heading(%ld-%ld)----------\n"
+			"%s", dp->dp_start, dp->dp_end, dp->dp_buf);
+		
 		/* multi-thread download, the response code should be 206. */
 		code = getrcode(dp->dp_buf);
 		if (code != 206 && code != 200) {
 			goto out;
 		} else if (code == 200 && dl->di_nthreads != 1) {
-			err_msg(0, "Host: %s does not support multi-thread "
-				   "download.\n try option '-n 1' again.\n",
-				    dl->di_host);
+			err_msg("Host: %s does not support multi-thread "
+				"download.\n try option '-n 1' again.\n",
+				dl->di_host);
 		}
 
 
@@ -124,7 +121,7 @@ int dlpart_recv_header(struct dlpart *dp)
 				end = strtol(ep + 1, NULL, 10);
 
 			if (start != dp->dp_start || end != dp->dp_end) {
-				err_msg(0, "response range error: %ld-%ld "
+				err_msg("response range error: %ld-%ld "
 					 "(%ld-%ld)\n",
 					 start, end, dp->dp_start, dp->dp_end);
 				goto out;
@@ -166,19 +163,19 @@ void dlpart_write(struct dlpart *dp, ssize_t *total_read,
 	char *buf = dp->dp_buf;
 
 	while (len > 0) {
-		/*debug("pwrite %d bytes >> fd(%d), offset %ld\n",
-			len, fd, offset);*/
+		err_dbg("pwrite %d bytes to file descriptor %d, offset %ld\n",
+			len, dp->dp_info->di_local, dp->dp_start);
 		n = pwrite(dp->dp_info->di_local, buf, len, dp->dp_start);
 		if (n > 0) {
 			len -= n;
 			buf += n;
 			dp->dp_start += n;
 		} else if (n == 0) {
-			err_exit(0, "pwrite end-of-file");
+			err_exit("pwrite end-of-file");
 		} else {
 			if (errno == EINTR)
 				continue;
-			err_msg(errno, "pwrite");
+			err_sys("pwrite");
 		}
 	}
 
@@ -186,8 +183,10 @@ void dlpart_write(struct dlpart *dp, ssize_t *total_read,
 	 * only lock the dp->read call is necessary, since it may
 	 * update the global varibale total_read and bytes_per_sec.
 	 */
-	if ((s = pthread_mutex_lock(&mutex)) != 0)
-		err_msg(s, "pthread_mutex_lock");
+	if ((s = pthread_mutex_lock(&mutex)) != 0) {
+		errno = s;
+		err_sys("pthread_mutex_lock");
+	}
 
 	/* 
 	 * Since we updated the 'total_read' and 'bytes_per_sec', calling
@@ -198,8 +197,10 @@ void dlpart_write(struct dlpart *dp, ssize_t *total_read,
 	if (bytes_per_sec)
 		*bytes_per_sec += dp->dp_nrd;
 	
-	if ((s = pthread_mutex_unlock(&mutex)) != 0)
-		err_msg(s, "pthread_mutex_unlock");
+	if ((s = pthread_mutex_unlock(&mutex)) != 0) {
+		errno = s;
+		err_sys("pthread_mutex_unlock");
+	}
 
 	dlpart_update(dp);
 }
@@ -207,7 +208,7 @@ void dlpart_write(struct dlpart *dp, ssize_t *total_read,
 void dlpart_delete(struct dlpart *dp)
 {
 	if (close(dp->dp_remote) == -1)
-		err_msg(errno, "close %d", dp->dp_remote);
+		err_sys("close %d", dp->dp_remote);
 	free(dp);
 }
 
@@ -240,9 +241,8 @@ try_sendhdr_again:
 			return NULL;
 
 		if (close(dp->dp_remote) == -1)
-			err_msg(errno, "close");
+			err_sys("close");
 
-		usleep(100000);
 		dp->dp_remote = dl->connect(dl);
 		goto try_sendhdr_again;
 	}
@@ -252,11 +252,11 @@ try_sendhdr_again:
 	 */
 	int flags;
 	if ((flags = fcntl(dp->dp_remote, F_GETFL, 0)) == -1)
-		err_exit(errno, "fcntl-getfl");
+		err_exit("fcntl-getfl");
 
 	flags |= O_NONBLOCK;
 	if (fcntl(dp->dp_remote, F_SETFL, flags) == -1)
-		err_exit(errno, "fcntl-setfl");
+		err_exit("fcntl-setfl");
 
 	return dp;
 }

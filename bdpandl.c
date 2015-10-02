@@ -22,8 +22,8 @@
 #include <signal.h>
 #include <pthread.h>
 #include <sys/socket.h>
+#include <err_handler.h>
 #include "dlinfo.h"
-#include "err_handler.h"
 
 
 static void usage(const char *progname)
@@ -31,8 +31,10 @@ static void usage(const char *progname)
 	if (progname && *progname)
 		fprintf(stderr, "Usage: %s [option] url\n", progname);
 	fprintf(stderr,
+		"    -d           enable debug output\n"
 		"    -n threads   specify the number of thread to download\n"
 		"    -o filename  specify the filename of output\n"
+		"    -l file      import urls from file(url may expire)\n"
 		"    -h	          display the help\n\n");
 	exit(EXIT_FAILURE);
 }
@@ -42,7 +44,7 @@ static void download_from_url(char *url, char *filename, int nts)
 	struct dlinfo *dl;
 
 	if (!(dl = dlinfo_new(url, filename, nts))) {
-		err_msg(0, "failed to download from url: %s", url);
+		err_msg("failed to download from url: %s", url);
 		return;
 	}
 
@@ -60,7 +62,7 @@ static void download_from_file(const char *listfile, int nts)
 	ssize_t num = 0;
 
 	if (!(list = fopen(listfile, "r")))
-		err_exit(errno, "failed to open list file: %s", listfile);
+		err_exit("failed to open list file: %s", listfile);
 
 	while (1) {
 		errno = 0;	/* ensure no effects by other calls */
@@ -80,7 +82,7 @@ static void download_from_file(const char *listfile, int nts)
 
 	free(lineptr);
 	if (fclose(list))
-		err_exit(errno, "failed to close list file: %s", listfile);
+		err_exit("failed to close list file: %s", listfile);
 }
 
 int main(int argc, char *argv[])
@@ -89,8 +91,11 @@ int main(int argc, char *argv[])
 	char *filename = NULL;
 	char *listfile = NULL;	/* which stored the download list */
 
-	while ((opt = getopt(argc, argv, "n:o:l:h")) != -1) {
+	while ((opt = getopt(argc, argv, "dn:o:l:h")) != -1) {
 		switch (opt) {
+		case 'd':
+			err_setdebug(true);
+			break;
 		case 'n':
 			nthreads = strtol(optarg, NULL, 10);
 			break;
@@ -110,11 +115,10 @@ int main(int argc, char *argv[])
 			(listfile && (argc != optind)))
 		usage(argv[0]);
 
-	if (!listfile) {
+	if (!listfile)
 		download_from_url(argv[optind], filename, nthreads);
-	} else {
+	else
 		download_from_file(listfile, nthreads);
-	}
 
 	return 0;
 }
