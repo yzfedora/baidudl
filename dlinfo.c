@@ -33,7 +33,7 @@
 #include "roll_display.h"
 
 /* Using to print the progress, percent... of download info */
-#define	DLINFO_PROMPT_SZ	1024
+#define DLINFO_PROMPT_SZ	1024
 static int dorecovery;
 static int try_ignore_records;
 static int threads_num;		/* Number of current threads doing download() */
@@ -420,9 +420,9 @@ static void dlinfo_sigalrm_handler(int signo)
 	printf("\r" "%80s", "");
 	printf("\r%s %4ld%s/s %5.1f%%\e[31m[%d/%d]\e[0m", prompt,
 	       (long) speed,
-	       (flags == 2) ? "KB" :
-	       (flags == 4) ? "MB" : "GB",
-	       ((float) total_read / total) * 100,
+	       (flags & 0x2) ? "KB" :
+	       (flags & 0x4) ? "MB" : "GB",
+	       ((float)total_read / total) * 100,
 	       threads_num, threads_total);
 
 	fflush(stdout);

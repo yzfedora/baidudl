@@ -29,7 +29,7 @@
 #include "dlcommon.h"
 #include "err_handler.h"
 
-#define	DLPART_NEW_TIMES	60
+#define DLPART_NEW_TIMES	120
 static pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
 
 
@@ -77,8 +77,8 @@ void dlpart_send_header(struct dlpart *dp)
 
 #ifdef __DEBUG__
 	printf("---------------Sending Header(%ld-%ld)----------------\n"
-		"%s---------------------------------------------------\n",
-		dp->dp_start, dp->dp_end, sbuf);
+	       "%s------------------------------------------------------\n",
+	       dp->dp_start, dp->dp_end, sbuf);
 #endif
 	nwrite(dp->dp_remote, sbuf, strlen(sbuf));
 }
@@ -93,7 +93,7 @@ int dlpart_recv_header(struct dlpart *dp)
 	while (is_header) {
 		dp->read(dp);
 		if (dp->dp_nrd <= 0)
-			return -1;
+			goto out;
 
 		if ((sp = strstr(dp->dp_buf, "\r\n\r\n"))) {
 			*sp = 0;
@@ -102,14 +102,14 @@ int dlpart_recv_header(struct dlpart *dp)
 			is_header = 0;
 		}
 #ifdef __DEBUG__
-		printf("------------Receiving Heading(%ld-%ld)----------\n"
-				"%s\n-----------------------------------\n",
-				dp->dp_start, dp->dp_end, dp->dp_buf);
+		printf("-----------Receiving Heading(%ld-%ld)----------\n"
+		       "%s\n-----------------------------------------------\n",
+		       dp->dp_start, dp->dp_end, dp->dp_buf);
 #endif
 		/* multi-thread download, the response code should be 206. */
 		code = getrcode(dp->dp_buf);
 		if (code != 206 && code != 200) {
-			return -1;
+			goto out;
 		} else if (code == 200 && dl->di_nthreads != 1) {
 			err_msg(0, "Host: %s does not support multi-thread "
 				   "download.\n try option '-n 1' again.\n",
@@ -127,16 +127,19 @@ int dlpart_recv_header(struct dlpart *dp)
 				err_msg(0, "response range error: %ld-%ld "
 					 "(%ld-%ld)\n",
 					 start, end, dp->dp_start, dp->dp_end);
-				return -1;
+				goto out;
 			}
 		}
 	}
 
-	/* FUCKING THE IMPLEMENTATION OF STRNCPY! try using memcpy() instead.
+	/* FUCKING THE IMPLEMENTATION OF STRNCPY! try using memmove() instead.
 	 * strncpy(dp->dp_buf, sp, dp->dp_nrd);
 	 */
 	memmove(dp->dp_buf, sp, dp->dp_nrd);
 	return 0;
+out:
+	dp->dp_nrd = 0;
+	return -1;
 }
 
 void dlpart_read(struct dlpart *dp)
@@ -250,6 +253,7 @@ try_sendhdr_again:
 	int flags;
 	if ((flags = fcntl(dp->dp_remote, F_GETFL, 0)) == -1)
 		err_exit(errno, "fcntl-getfl");
+
 	flags |= O_NONBLOCK;
 	if (fcntl(dp->dp_remote, F_SETFL, flags) == -1)
 		err_exit(errno, "fcntl-setfl");

@@ -23,7 +23,7 @@
 void _err_exit(int flags, int err, char *fmt, ...)
 {
 #undef	EMSG_BUF
-#define	EMSG_BUF	1024
+#define EMSG_BUF	1024
 	va_list ap;
 	char buf[EMSG_BUF];
 
