@@ -30,23 +30,26 @@
 #include "dlinfo.h"
 #include "dlpart.h"
 #include "dlcommon.h"
-#include "roll_display.h"
+#include "scrolling_display.h"
 
 /* 
  * Using to print the progress, percent... of download info.
  */
 #define DLINFO_PROMPT_SZ	1024
 #define DLINFO_TRYTIMES_MAX	30
+#define DLINFO_NEW_TRYTIMES_MAX	3
+/* Reserved 50 column for others prompt */
+#define DLINFO_PROMPT_RESERVED	50
 
 static int dorecovery;
 static int try_ignore_records;
 static int threads_num;		/* Number of current threads doing download() */
 static int threads_total;
 static char prompt[DLINFO_PROMPT_SZ];
-static char prompt_size[16];	/* File size string. */
+static char file_size_str[16];	/* File size string. */
 static ssize_t total, total_read, bytes_per_sec;
 static long sig_cnt;
-
+static unsigned int winsize_column;
 
 static void *download(void *arg);
 
@@ -131,7 +134,7 @@ static void dlinfo_send_request(struct dlinfo *dl)
 		"Host: %s\r\n\r\n",
 		geturi(dl->di_url, dl->di_host), dl->di_host);
 	nwrite(dl->di_remote, buf, strlen(buf));
-	err_dbg("-------------- Send Requst (Meta info) -----------\n"
+	err_dbg(2, "-------------- Send Requst (Meta info) -----------\n"
 		"%s", buf);
 }
 
@@ -151,7 +154,7 @@ static int dlinfo_recv_and_parsing(struct dlinfo *dl)
 		return -1;
 
 	buf[n] = 0;
-	err_dbg("--------------Received Meta info---------------\n"
+	err_dbg(2, "--------------Received Meta info---------------\n"
 		"%s\n", buf);
 
 	/* response code valid range [200-300) */
@@ -375,15 +378,21 @@ static char *dlinfo_set_prompt(struct dlinfo *dl)
 	}
 
 	snprintf(prompt, sizeof(prompt), "\e[7mDownload: ");
-	snprintf(prompt_size, sizeof(prompt_size), "%.1f%s ",
+	snprintf(file_size_str, sizeof(file_size_str), "%.1f%s ",
 		 orig_size / ((double) (1 << (10 * flags))),
 		 (flags == 0) ? "Bytes" :
 		 (flags == 1) ? "KB" :
 		 (flags == 2) ? "MB" : (flags == 3) ? "GB" : "TB");
 
 	sig_cnt = 0;
-	/* Initial roll displayed string, and expect maximum length. */
-	if (roll_display_init(dl->di_filename, 30) == -1)
+
+	winsize_column = getwcol();	/* initialize window column. */
+
+	/* 
+	 * Initial roll displayed string, and expect maximum length.
+	 */
+	if (scrolling_display_init(dl->di_filename, winsize_column -
+				DLINFO_PROMPT_RESERVED) == -1)
 		err_exit("Setting roll display function error");
 	return prompt;
 }
@@ -392,12 +401,28 @@ static char *dlinfo_set_prompt(struct dlinfo *dl)
  * full name of this file. */
 static void dlinfo_set_prompt_dyn(void)
 {
-	int len, padding;
-	char *ptr = roll_display_ptr(&len, &padding);
+	unsigned int len, padding;
+	char *ptr = scrolling_display_ptr(&len, &padding);
 
 	snprintf(prompt + 14, sizeof(prompt) - 14, "%.*s%*s%s", len, ptr,
-		 padding + 5, "", prompt_size);
+		 padding + 5, "", file_size_str);
 	sig_cnt++;
+}
+
+/*
+ * To prevent the round up of snprintf().
+ * example:
+ * 	99.97 may be round up to 100.0
+ */
+static char *dlinfo_get_percentage(void)
+{
+#define DLINFO_PERCENTAGE_STR_MAX	32
+	int len;
+	static char percentage_str[DLINFO_PERCENTAGE_STR_MAX];
+	len = snprintf(percentage_str, sizeof(percentage_str), "%6.2f",
+			(double)total_read * 100 / total);
+	percentage_str[len - 1] = 0;
+	return percentage_str;
 }
 
 static void dlinfo_sigalrm_handler(int signo)
@@ -411,16 +436,22 @@ static void dlinfo_sigalrm_handler(int signo)
 		flags <<= 1;
 	} while (speed > 1024);
 
-	printf("\r" "%80s", "");
-	printf("\r%s %4ld%s/s %5.1f%%\e[31m[%d/%d]\e[0m", prompt,
-	       (long) speed,
+	printf("\r" "%*s", winsize_column, "");
+	printf("\r%s %4ld%s/s  %s%%  \e[31m[%3d/%-3d]\e[0m", prompt,
+	       (long)speed,
 	       (flags & 0x2) ? "KB" :
 	       (flags & 0x4) ? "MB" : "GB",
-	       ((float)total_read / total) * 100,
+	       dlinfo_get_percentage(),
 	       threads_num, threads_total);
 
 	fflush(stdout);
 	bytes_per_sec = 0;
+}
+
+static void dlinfo_sigwinch_handler(int signo)
+{
+	winsize_column = getwcol();
+	scrolling_display_setsize(winsize_column - DLINFO_PROMPT_RESERVED);
 }
 
 static void dlinfo_register_signal_handler(void)
@@ -431,12 +462,19 @@ static void dlinfo_register_signal_handler(void)
 	act.sa_flags |= SA_RESTART;
 	act.sa_handler = dlinfo_sigalrm_handler;
 
+	/* 
+	 * Register the SIGALRM handler, for print the progress of download.
+	 */
 	if (sigaction(SIGALRM, &act, &old) == -1)
 		err_exit("sigaction - SIGALRM");
 
-	/*act.sa_handler = dlinfo_sigterm_handler;
-	if (sigaction(SIGTERM, &act, &old) == -1)
-		err_exit("sigaction - SIGTERM");*/
+	/*
+	 * Register the SIGWINCH signal, for adjust the output length of
+	 * progress when user change the window size.
+	 */
+	act.sa_handler = dlinfo_sigwinch_handler;
+	if (sigaction(SIGWINCH, &act, &old) == -1)
+		err_exit("sigaction - SIGWINCH");
 }
 
 
@@ -476,13 +514,13 @@ static void *download(void *arg)
 	PACKET_ARGS_FREE((struct packet_args *)arg);
 	
 	if (!(*dp = dlpart_new(dl, orig_start, orig_end, orig_no))) {
-		err_sys("error, try download range: %ld - %ld "
-			   "again", orig_start, orig_end);
+		err_msg("error, try download range: %ld - %ld again",
+						orig_start, orig_end);
 		return NULL;
 	}
 
 	threads_num++;		/* Global download threads statistics. */
-	err_dbg("\nthreads %ld starting to download range: %ld-%ld\n",
+	err_dbg(1, "\nthreads %ld starting to download range: %ld-%ld\n",
 		(long)pthread_self(), (*dp)->dp_start, (*dp)->dp_end);
 
 	/* write remaining data in the header. */
@@ -496,9 +534,9 @@ static void *download(void *arg)
 		 */
 		if ((*dp)->dp_nrd == -1) {
 			if (errno == EAGAIN || errno == EWOULDBLOCK) {
-				if (btimes++ > DLINFO_TRYTIMES_MAX)
+				if (btimes++ >= DLINFO_TRYTIMES_MAX)
 					goto try_connect_again;
-				sleep(1);
+				usleep(1000000 + btimes * 100000);
 				continue;
 			}
 
@@ -590,25 +628,30 @@ void dlinfo_launch(struct dlinfo *dl)
 	int s;
 	struct dlthreads *dt;
 
-	/* Before we create threads to start download, we set the download
-	 * prompt first. and set the alarm too. */
+	/* 
+	 * Before we create threads to start download, we set the download
+	 * prompt first. and set the alarm too.
+	 */
 	dlinfo_set_prompt(dl);
 	dlinfo_register_signal_handler();
 	dlinfo_alarm_launch();
 
-
-dlinfo_launch_start:
-	/* Set offset of the file to the start of records, and recovery
-	 * number of threads to dl->di_nthreads. */
+launch:
+	/* 
+	 * Set offset of the file to the start of records, and recovery
+	 * number of threads to dl->di_nthreads.
+	 */
 	if (dorecovery) {
-		/* if file has exist, and it's length is equal to bytes
-		 * which need download bytes. so it has download finished. */
+		/* 
+		 * if file has exist, and it's length is equal to bytes
+		 * which need download bytes. so it has download finished.
+		 */
 		if (dlinfo_download_is_finished(dl))
 			return;
 
 		/* can't recovery records normally, try NOT use records again */
 		if (dlinfo_records_recovery_all(dl) == -1)
-			goto dlinfo_launch_again;
+			goto try_ignore_records_again;
 	} else {
 		if (dlinfo_range_generator(dl) == -1)
 			return;
@@ -642,7 +685,7 @@ dlinfo_launch_start:
 	printf("\n");
 	return;
 
-dlinfo_launch_again:
+try_ignore_records_again:
 	if (try_ignore_records) {
 		try_ignore_records = 0;
 		dorecovery = 0;
@@ -653,7 +696,7 @@ dlinfo_launch_again:
 			err_sys("remove");
 
 		dlinfo_open_local_file(dl);
-		goto dlinfo_launch_start;
+		goto launch;
 	}
 }
 
@@ -676,6 +719,7 @@ void dlinfo_delete(struct dlinfo *dl)
 
 struct dlinfo *dlinfo_new(char *url, char *filename, int nthreads)
 {
+	int try_times = 0;
 	struct dlinfo *dl;
 
 	if ((dl = malloc(sizeof(*dl)))) {
@@ -704,19 +748,26 @@ struct dlinfo *dlinfo_new(char *url, char *filename, int nthreads)
 		 * request, that we can retriving the length and filename.
 		 */
 		dlinfo_init(dl);
+dlinfo_new_again:
 		dl->di_remote = dlinfo_connect(dl);
 		dlinfo_send_request(dl);
-		if (dlinfo_recv_and_parsing(dl) == -1)
+		if (dlinfo_recv_and_parsing(dl) == -1) {
+			if (close(dl->di_remote) == -1)
+				err_sys("close remote file descriptor");
+			if (try_times++ < DLINFO_NEW_TRYTIMES_MAX)
+				goto dlinfo_new_again;
 			goto dlinfo_new_failure;
+		}
 
-		err_dbg("filename: %s, length: %ld\n", dl->di_filename,
+		err_dbg(1, "filename: %s, length: %ld\n", dl->di_filename,
 			(long)dl->di_length);
 		dlinfo_open_local_file(dl);
 
 		total = dl->di_length;	/* Set global variable 'total' */
-		/* close temporary connection */
+
+		/* close temporary connection. */
 		if (close(dl->di_remote) == -1)
-			goto dlinfo_new_failure;
+			err_sys("close remote file descriptor");
 
 		return dl;
 	}

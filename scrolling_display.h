@@ -13,12 +13,13 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  *************************************************************************/
-#ifndef _DLCOMMON_H
-#define _DLCOMMON_H
+#ifndef _SCROLLING_DISPLAY_H
+#define _SCROLLING_DISPLAY_H
 
-int getrcode(char *s);
-int getwcol(void);
-void nwrite(int fd, const void *buf, unsigned int len);
-char *geturi(const char *s, const char *u);
-char *string_decode(char *src);
+#define likely(x)	__builtin_expect((x), 1)
+#define unlikely(x)	__builtin_expect((x), 0)
+
+int scrolling_display_init(char *s, unsigned int length);
+unsigned int scrolling_display_setsize(unsigned int winsz);
+char *scrolling_display_ptr(unsigned int *len, unsigned int *padding);
 #endif

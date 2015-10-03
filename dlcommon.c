@@ -16,8 +16,8 @@
 #include <unistd.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/ioctl.h>
 #include <err_handler.h>
-#include <errno.h>
 #include "dlcommon.h"
 #include "dlinfo.h"
 
@@ -34,6 +34,15 @@ int getrcode(char *s)
 		return code;
 	}
 	return -1;
+}
+
+int getwcol(void)
+{
+	struct winsize size;
+
+	if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &size) == -1)
+		err_sys("ioctl get the window size");
+	return size.ws_col;
 }
 
 /* return a pointer to start of URI on success, or no any URI can be find,

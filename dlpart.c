@@ -76,7 +76,7 @@ void dlpart_send_header(struct dlpart *dp)
 		      geturi(dl->di_url, dl->di_host), dp->dp_info->di_host,
 		      (long)dp->dp_start, (long)dp->dp_end);
 
-	err_dbg("\n---------------Sending Header(%ld-%ld)----------------\n"
+	err_dbg(2, "\n---------------Sending Header(%ld-%ld)----------------\n"
 		"%s", dp->dp_start, dp->dp_end, sbuf);
 	nwrite(dp->dp_remote, sbuf, strlen(sbuf));
 }
@@ -100,7 +100,7 @@ int dlpart_recv_header(struct dlpart *dp)
 			is_header = 0;
 		}
 		
-		err_dbg("\n-------------Receiving Heading(%ld-%ld)----------\n"
+		err_dbg(2, "\n----------Receiving Heading(%ld-%ld)----------\n"
 			"%s", dp->dp_start, dp->dp_end, dp->dp_buf);
 		
 		/* multi-thread download, the response code should be 206. */
@@ -163,8 +163,6 @@ void dlpart_write(struct dlpart *dp, ssize_t *total_read,
 	char *buf = dp->dp_buf;
 
 	while (len > 0) {
-		err_dbg("pwrite %d bytes to file descriptor %d, offset %ld\n",
-			len, dp->dp_info->di_local, dp->dp_start);
 		n = pwrite(dp->dp_info->di_local, buf, len, dp->dp_start);
 		if (n > 0) {
 			len -= n;
@@ -237,7 +235,7 @@ struct dlpart *dlpart_new(struct dlinfo *dl, ssize_t start, ssize_t end, int no)
 try_sendhdr_again:
 	dp->sendhdr(dp);
 	if (dp->recvhdr(dp) == -1) {
-		if (try_times++ > DLPART_NEW_TIMES)
+		if (try_times++ >= DLPART_NEW_TIMES)
 			return NULL;
 
 		if (close(dp->dp_remote) == -1)

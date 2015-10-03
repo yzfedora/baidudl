@@ -31,7 +31,7 @@ static void usage(const char *progname)
 	if (progname && *progname)
 		fprintf(stderr, "Usage: %s [option] url\n", progname);
 	fprintf(stderr,
-		"    -d           enable debug output\n"
+		"    -d level     enable debug level for ouput\n"
 		"    -n threads   specify the number of thread to download\n"
 		"    -o filename  specify the filename of output\n"
 		"    -l file      import urls from file(url may expire)\n"
@@ -91,10 +91,14 @@ int main(int argc, char *argv[])
 	char *filename = NULL;
 	char *listfile = NULL;	/* which stored the download list */
 
-	while ((opt = getopt(argc, argv, "dn:o:l:h")) != -1) {
+	while ((opt = getopt(argc, argv, "d:n:o:l:h")) != -1) {
 		switch (opt) {
 		case 'd':
-			err_setdebug(true);
+			/*
+			 * default debug is off, current support 1 and 2
+			 * debug level.
+			 */
+			err_setdebug(atoi(optarg));
 			break;
 		case 'n':
 			nthreads = strtol(optarg, NULL, 10);

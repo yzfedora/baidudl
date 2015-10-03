@@ -1,5 +1,5 @@
 PROGS	= bdpandl
-OBJS	= dlinfo.o dlpart.o dlcommon.o roll_display.o
+OBJS	= dlinfo.o dlpart.o dlcommon.o scrolling_display.o
 FLAGS	= -Wall -lpthread -lerr
 CC	= gcc
 
