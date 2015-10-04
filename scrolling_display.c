@@ -23,13 +23,18 @@
 #include <string.h>
 #include "scrolling_display.h"
 
-static char *roll_display_orig;
-static char *roll_display_curr;
-static unsigned int roll_display_window_size;	/* Window size of display. */
-static unsigned int roll_display_length_max;	/* Total used width of display.
-					   (ascii use 1, non-ascii use 2) */
-static unsigned int roll_display_orig_size;	/* Length of original string. */
+static char *scrolling_display_orig;	/* Pointer to start of string. */
+static char *scrolling_display_curr;	/* Pointer to current string. */
+/* Length of original string. */
+static unsigned int scrolling_display_orig_size;
+/* Window size of scrolling display. */
+static unsigned int scrolling_display_window_size;	
+/* Used width when display in terminal.(ASCII use 1, non-ASCII use 2) */
+static unsigned int scrolling_display_length_max;
 
+/*
+ * Return the number of characters(displayed characters) in the string utf.
+ */
 static unsigned int utf8_char_length(char *utf)
 {
 	unsigned int ulen = 0;
@@ -42,55 +47,70 @@ static unsigned int utf8_char_length(char *utf)
 	return (ulen ? ulen : 1);
 }
 
+/*
+ * Initialize the scrolling_display_* to pointer s, and the initialize the
+ * window size of used scrolling display. 0 returned on success, or -1 on
+ * error.
+ */
 int scrolling_display_init(char *s, unsigned int window_size)
 {
-	if (!s || window_size <= 0)
+	if (!s)
 		return -1;
 	char *ptr = s;
 	int tmp;
 
-	roll_display_orig = s;
-	roll_display_curr = s;
-	roll_display_window_size = window_size;
-	roll_display_orig_size = strlen(s);
+	scrolling_display_orig = s;
+	scrolling_display_curr = s;
+	scrolling_display_window_size = window_size;
+	scrolling_display_orig_size = strlen(s);
 	
 	while (*ptr) {
 		tmp = utf8_char_length(ptr);
-		roll_display_length_max += (1 == tmp? 1 : 2) ;
+		scrolling_display_length_max += (1 == tmp? 1 : 2) ;
 		ptr += tmp;
 	}
 	return 0;
 }
 
+/*
+ * Set the window size to new, and return old window size.
+ */
 unsigned int scrolling_display_setsize(unsigned int winsz)
 {
-	unsigned int save = roll_display_window_size;
-
+	unsigned int save = scrolling_display_window_size;
+	scrolling_display_window_size = winsz;
 	return save;
 }
 
-/* Return a pointer to start of current string, and set the suitable maximum
- * of can be displayed.(*len <= roll_display_window_size) */
+/* 
+ * Return a pointer to start of current string, and set the suitable maximum
+ * of can be displayed.(*len <= scrolling_display_window_size).
+ */
 char *scrolling_display_ptr(unsigned int *len, unsigned int *padding)
 {
 	*len = *padding = 0;
-	if (roll_display_length_max <= roll_display_window_size) {
+
+	/*
+	 * Both scrolling_display_length_max and scrolling_display_window_size
+	 * are represents display units be used.
+	 */
+	if (scrolling_display_length_max <= scrolling_display_window_size) {
 		if (len)
-			*len = roll_display_orig_size;
+			*len = scrolling_display_orig_size;
 
 		if (padding)
-			*padding = roll_display_window_size -
-						roll_display_length_max;
-		return roll_display_orig;
+			*padding = scrolling_display_window_size -
+						scrolling_display_length_max;
+		return scrolling_display_orig;
 	}
 
-	char *ret = roll_display_curr;
-	char *tmp = roll_display_curr;
+	char *ret = scrolling_display_curr;
+	char *tmp = scrolling_display_curr;
 	unsigned int l = 0;
 	unsigned int t;
 
 	/* Assume non-ascii characters use 2 width of ascii to display. */
-	while (l < roll_display_window_size && *tmp) {
+	while (l < scrolling_display_window_size && *tmp) {
 		t = utf8_char_length(tmp);
 		l += (1 == t) ? 1 : 2;
 		*len += t;
@@ -100,17 +120,17 @@ char *scrolling_display_ptr(unsigned int *len, unsigned int *padding)
 
 	/* If display next non-ascii character will use width greater than
 	 * specified '*len' */
-	if (l > roll_display_window_size) {
+	if (l > scrolling_display_window_size) {
 		*len -= t;
 		l -= (1 == t) ? 1 : 2;
 		if (padding)
-			*padding = roll_display_window_size - l;
+			*padding = scrolling_display_window_size - l;
 	}
 
 	if (likely(*tmp))
-		roll_display_curr += utf8_char_length(roll_display_curr);
+		scrolling_display_curr += utf8_char_length(scrolling_display_curr);
 	else
-		roll_display_curr = roll_display_orig;
+		scrolling_display_curr = scrolling_display_orig;
 
 	return ret;
 }

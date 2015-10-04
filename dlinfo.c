@@ -39,7 +39,7 @@
 #define DLINFO_TRYTIMES_MAX	30
 #define DLINFO_NEW_TRYTIMES_MAX	3
 /* Reserved 50 column for others prompt */
-#define DLINFO_PROMPT_RESERVED	50
+#define DLINFO_PROMPT_RESERVED	48
 
 static int dorecovery;
 static int try_ignore_records;
@@ -404,8 +404,8 @@ static void dlinfo_set_prompt_dyn(void)
 	unsigned int len, padding;
 	char *ptr = scrolling_display_ptr(&len, &padding);
 
-	snprintf(prompt + 14, sizeof(prompt) - 14, "%.*s%*s%s", len, ptr,
-		 padding + 5, "", file_size_str);
+	snprintf(prompt + 14, sizeof(prompt) - 14, "%.*s  %*s%s", len, ptr,
+		 padding - 2, "", file_size_str);
 	sig_cnt++;
 }
 
@@ -430,14 +430,14 @@ static void dlinfo_sigalrm_handler(int signo)
 	int flags = 1;
 	ssize_t speed = bytes_per_sec;
 
-	dlinfo_set_prompt_dyn();
 	do {
 		speed >>= 10;
 		flags <<= 1;
 	} while (speed > 1024);
 
+	dlinfo_set_prompt_dyn();
 	printf("\r" "%*s", winsize_column, "");
-	printf("\r%s %4ld%s/s  %s%%  \e[31m[%3d/%-3d]\e[0m", prompt,
+	printf("\r%s   %4ld%s/s  %s%%  \e[31m[%3d/%-3d]\e[0m", prompt,
 	       (long)speed,
 	       (flags & 0x2) ? "KB" :
 	       (flags & 0x4) ? "MB" : "GB",
