@@ -115,7 +115,7 @@ int dlinfo_connect(struct dlinfo *dl)
 	}
 
 	if (NULL == ai)
-		err_exit("Couldn't connection to: %s\n", dl->di_host);
+		err_exit("Couldn't connection to: %s", dl->di_host);
 
 	freeaddrinfo(res);
 	return fd;
@@ -405,7 +405,7 @@ static void dlinfo_set_prompt_dyn(void)
 	char *ptr = scrolling_display_ptr(&len, &padding);
 
 	snprintf(prompt + 14, sizeof(prompt) - 14, "%.*s  %*s%s", len, ptr,
-		 padding - 2, "", file_size_str);
+		 padding, "", file_size_str);
 	sig_cnt++;
 }
 

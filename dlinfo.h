@@ -72,7 +72,7 @@ struct dlinfo {
 	char	di_filename[DLINFO_NAME_MAX];
 	char	di_serv[DLINFO_SRV_SZ];	/* service type */
 	char	di_host[DLINFO_HST_SZ];	/* host name or IP address */
-	char	di_url[DLINFO_URL_SZ];	/* oritinal download url request */
+	char	di_url[DLINFO_URL_SZ];	/* original download url request */
 
 	struct dlthreads *di_threads;
 	

@@ -65,7 +65,7 @@ try_pwrite_range_end:
  * 	GET url HTTP/1.1\r\n
  * 	Range: bytes=x-y\r\n
  */
-void dlpart_send_header(struct dlpart *dp)
+static void dlpart_send_header(struct dlpart *dp)
 {
 	char sbuf[DLPART_BUFSZ];
 	struct dlinfo *dl = dp->dp_info;
@@ -81,7 +81,7 @@ void dlpart_send_header(struct dlpart *dp)
 	nwrite(dp->dp_remote, sbuf, strlen(sbuf));
 }
 
-int dlpart_recv_header(struct dlpart *dp)
+static int dlpart_recv_header(struct dlpart *dp)
 {
 	struct dlinfo *dl = dp->dp_info;
 	int is_header = 1, code;
@@ -96,7 +96,7 @@ int dlpart_recv_header(struct dlpart *dp)
 		if ((sp = strstr(dp->dp_buf, "\r\n\r\n"))) {
 			*sp = 0;
 			sp += 4;
-			dp->dp_nrd -= (strlen(dp->dp_buf) + 4);
+			dp->dp_nrd -= (sp - dp->dp_buf);
 			is_header = 0;
 		}
 		
@@ -115,21 +115,22 @@ int dlpart_recv_header(struct dlpart *dp)
 
 
 #define RANGE	"Content-Range: bytes "
-		if (NULL != (p = strstr(dp->dp_buf, RANGE))) {
+		if ((p = strstr(dp->dp_buf, RANGE))) {
 			start = strtol(p + sizeof(RANGE) - 1, &ep, 10);
 			if  (ep && *ep == '-')
 				end = strtol(ep + 1, NULL, 10);
 
 			if (start != dp->dp_start || end != dp->dp_end) {
-				err_msg("response range error: %ld-%ld "
-					 "(%ld-%ld)\n",
-					 start, end, dp->dp_start, dp->dp_end);
+				err_msg("need download from %ld to %ld, but "
+					"return %ld-%ld\n",
+					 dp->dp_start, dp->dp_end, start, end);
 				goto out;
 			}
 		}
 	}
 
-	/* FUCKING THE IMPLEMENTATION OF STRNCPY! try using memmove() instead.
+	/* 
+	 * FUCKING THE IMPLEMENTATION OF STRNCPY! try using memmove() instead.
 	 * strncpy(dp->dp_buf, sp, dp->dp_nrd);
 	 */
 	memmove(dp->dp_buf, sp, dp->dp_nrd);
@@ -139,24 +140,62 @@ out:
 	return -1;
 }
 
-void dlpart_read(struct dlpart *dp)
+static char *bstrstr(char *src, unsigned int src_len,
+			char *dst, unsigned int dst_len)
+{
+	char *p1 = src;
+	char *p2 = dst;
+	char *saved_ptr;
+	unsigned int matched = 0;
+
+	while (p1 < src + src_len) {
+		if (*p1++ == *p2++) {
+			if (++matched == dst_len) {
+				return (p1 - dst_len);
+			}
+			if (matched == 1)
+				saved_ptr = p1;
+		} else {
+			if (matched > 0)
+				p1 = saved_ptr;
+			p2 = dst;
+			matched = 0;
+		}
+	}
+
+	return NULL;
+}
+
+static void dlpart_read(struct dlpart *dp)
 {
 	/* 
 	 * If any errors occured, -1 will returned, and errno will be
 	 * set correctly
 	 */
-	dp->dp_nrd = read(dp->dp_remote, dp->dp_buf, DLPART_BUFSZ - 1);
-	if (dp->dp_nrd <= 0)
-		return;
+	dp->dp_nrd = read(dp->dp_remote, dp->dp_buf, DLPART_BUFSZ);
 	
-	dp->dp_buf[dp->dp_nrd] = 0;	
+	/*
+	 * Use to debug, find sometimes store "{"error_code"...}" int local
+	 * file.
+	 */
+	if (bstrstr(dp->dp_buf, dp->dp_nrd > 0 ? dp->dp_nrd : 0,
+					"request_id", 10)) {
+		printf("\n*********** Detected ERROR *************");
+		printf("\nErrno: %d", errno);
+		printf("\nThread No: %d", dp->dp_no);
+		printf("\nReference socket: %d", dp->dp_remote);
+		printf("\nRange from: %ld to %ld", dp->dp_start, dp->dp_end);
+		printf("\nReceived length: %d", dp->dp_nrd);
+		printf("\nReceived data:\n%s", dp->dp_buf);
+		pthread_exit(NULL);
+	}
 }
 
 /*
  * Write 'dp->dp_nrd' data which pointed by 'dp->dp_buf' to local file.
  * And the offset 'dp->dp_start' will be updated also.
  */
-void dlpart_write(struct dlpart *dp, ssize_t *total_read,
+static void dlpart_write(struct dlpart *dp, ssize_t *total_read,
 		ssize_t *bytes_per_sec)
 {
 	int s, n, len = dp->dp_nrd;
@@ -203,7 +242,7 @@ void dlpart_write(struct dlpart *dp, ssize_t *total_read,
 	dlpart_update(dp);
 }
 
-void dlpart_delete(struct dlpart *dp)
+static void dlpart_delete(struct dlpart *dp)
 {
 	if (close(dp->dp_remote) == -1)
 		err_sys("close %d", dp->dp_remote);
