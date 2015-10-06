@@ -32,6 +32,27 @@
 #include "dlcommon.h"
 #include "scrolling_display.h"
 
+/*
+ * Protect the variables 'threads_total' and 'threads_curr' in multi-threads.
+ */
+static pthread_mutex_t memory_lock = PTHREAD_MUTEX_INITIALIZER;
+#define MEMORY_LOCK()							\
+	do {								\
+		int rc;							\
+		if ((rc = pthread_mutex_lock(&memory_lock)) != 0)	\
+			err_sys("memory lock");				\
+	} while (0)
+#define MEMORY_UNLOCK()							\
+	do {								\
+		int rc;							\
+		if ((rc = pthread_mutex_unlock(&memory_lock)) != 0)	\
+			err_sys("memory unlock");			\
+	} while (0)
+#define SAFE_OPERATION(statement)					\
+	MEMORY_LOCK();							\
+	statement;							\
+	MEMORY_UNLOCK();
+
 /* 
  * Using to print the progress, percent... of download info.
  */
@@ -43,7 +64,7 @@
 
 static int dorecovery;
 static int try_ignore_records;
-static int threads_num;		/* Number of current threads doing download() */
+static int threads_curr;		/* Number of current threads doing download() */
 static int threads_total;
 static char prompt[DLINFO_PROMPT_SZ];
 static char file_size_str[16];	/* File size string. */
@@ -288,7 +309,7 @@ static ssize_t dlinfo_records_recovery_all(struct dlinfo *dl)
 			 */
 			(*dt)->thread = 0;
 			(*dt)->dp = NULL;
-			threads_total--;
+			SAFE_OPERATION(threads_total--;)
 			goto next_range;
 		}
 
@@ -444,7 +465,7 @@ static void dlinfo_sigalrm_handler(int signo)
 	       (flags & 0x2) ? "KB" :
 	       (flags & 0x4) ? "MB" : "GB",
 	       dlinfo_get_percentage(),
-	       threads_num, threads_total);
+	       threads_curr, threads_total);
 
 	fflush(stdout);
 	bytes_per_sec = 0;
@@ -521,11 +542,16 @@ static void *download(void *arg)
 		return NULL;
 	}
 
-	threads_num++;		/* Global download threads statistics. */
 	err_dbg(1, "\nthreads %ld starting to download range: %ld-%ld\n",
-		(long)pthread_self(), (*dp)->dp_start, (*dp)->dp_end);
+					(long)pthread_self(),
+					(*dp)->dp_start, (*dp)->dp_end);
+	/* 
+	 * Updating the counter of current running threads. and write the
+	 * remaining data which in the header to local file.
+	 */
+	SAFE_OPERATION(threads_curr++;)
 
-	/* write remaining data in the header. */
+
 	(*dp)->write(*dp, &total_read, &bytes_per_sec);
 
 	while ((*dp)->dp_start < (*dp)->dp_end) {
@@ -557,8 +583,11 @@ try_connect_again:
 			(*dp)->delete(*dp);
 
 			*dp = dlpart_new(dl, orig_start, orig_end, orig_no);
-			if (!*dp)
+			if (!*dp) {
+				err_msg("\nremaining bytes %ld - %ld need to "
+					"download", orig_start, orig_end);
 				goto out;
+			}
 		}
 
 		btimes = 0;
@@ -566,12 +595,14 @@ try_connect_again:
 
 	}
 	
-	/* Subtract the current finished thread. because following line is put
-	 * in the front of 'threads_num--', this may cause 'threads_num'
-	 * greater thant 'threads_total' at a moment. */
-	threads_total--;
+	/* 
+	 * Subtract the current finished thread. because following line is put
+	 * in the front of 'threads_curr--', this may cause 'threads_curr'
+	 * greater thant 'threads_total' at a moment.
+	 */
+	SAFE_OPERATION(threads_total--;)
 out:
-	threads_num--;
+	SAFE_OPERATION(threads_curr--;)
 	return NULL;
 }
 
@@ -728,7 +759,7 @@ struct dlinfo *dlinfo_new(char *url, char *filename, int nthreads)
 		total = 0;
 		total_read = 0;
 		bytes_per_sec = 0;
-		threads_num = 0;
+		threads_curr = 0;
 		threads_total = 0;
 		dorecovery = 0;	/* reset this flags for each download */
 		try_ignore_records = 0;
