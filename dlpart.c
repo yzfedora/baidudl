@@ -78,7 +78,7 @@ static void dlpart_send_header(struct dlpart *dp)
 
 	err_dbg(2, "\n---------------Sending Header(%ld-%ld)----------------\n"
 		"%s", dp->dp_start, dp->dp_end, sbuf);
-	nwrite(dp->dp_remote, sbuf, strlen(sbuf));
+	writen(dp->dp_remote, sbuf, strlen(sbuf));
 }
 
 static int dlpart_recv_header(struct dlpart *dp)

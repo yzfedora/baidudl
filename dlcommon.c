@@ -58,22 +58,26 @@ char *geturi(const char *s, const char *u)
 	return p;
 }
 
-void nwrite(int fd, const void *buf, unsigned int len)
+ssize_t writen(int fd, const void *buf, size_t count)
 {
-	unsigned int n;
+	int nwrt;
+	const char *ptr = buf;
+	size_t nleft = count;
 
-	while (len > 0) {
-		n = write(fd, buf, len);
-		if (n == -1) {
-			if (errno == EPIPE)
-				err_exit("nwrite");
-			err_sys("nwrite");
-			continue;
+	errno = 0;
+	while (nleft > 0) {
+		if ((nwrt = write(fd, ptr, nleft)) > 0) {
+			nleft -= nwrt;
+			ptr += nwrt;
+		} else if (nwrt == 0) {
+			return 0;
+		} else {
+			if (errno == EINTR)
+				continue;
+			err_exit("writen");
 		}
-			
-		len -= n;
-		buf += n;
 	}
+	return count;
 }
 
 /*
@@ -81,8 +85,8 @@ void nwrite(int fd, const void *buf, unsigned int len)
  */
 char *string_decode(char *src)
 {
-#define ENCODE_NAME_MAX	(NAME_MAX * 3 + 1)
-	char tmp[ENCODE_NAME_MAX], *s = src;
+	char tmp[DLINFO_ENCODE_NAME_MAX];
+	char *s = src;
 	int i, j, k, t;
 
 	/* strip the double-quotes */

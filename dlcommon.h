@@ -18,7 +18,7 @@
 
 int getrcode(char *s);
 int getwcol(void);
-void nwrite(int fd, const void *buf, unsigned int len);
+ssize_t writen(int fd, const void *buf, size_t count);
 char *geturi(const char *s, const char *u);
 char *string_decode(char *src);
 #endif

@@ -25,6 +25,7 @@
 #define DLINFO_HST_SZ	512
 #define DLINFO_URL_SZ	4096
 #define DLINFO_NAME_MAX	(NAME_MAX + 1)
+#define DLINFO_ENCODE_NAME_MAX	(NAME_MAX * 3 + 1)
 
 struct dlthreads {
 	pthread_t		thread;

@@ -133,9 +133,9 @@ static void dlinfo_send_request(struct dlinfo *dl)
 	sprintf(buf, "GET %s HTTP/1.1\r\n"
 		"Host: %s\r\n\r\n",
 		geturi(dl->di_url, dl->di_host), dl->di_host);
-	nwrite(dl->di_remote, buf, strlen(buf));
+	writen(dl->di_remote, buf, strlen(buf));
 	err_dbg(2, "-------------- Send Requst (Meta info) -----------\n"
-		"%s", buf);
+			"%s", buf);
 }
 
 /*
@@ -147,6 +147,7 @@ static int dlinfo_recv_and_parsing(struct dlinfo *dl)
 	int n;
 	int code;
 	char buf[DLINFO_RCV_SZ];
+	char tmp[DLINFO_ENCODE_NAME_MAX];
 	char *p;
 
 	/* any error or end-of-file will cause parsing header fails */
@@ -173,26 +174,26 @@ static int dlinfo_recv_and_parsing(struct dlinfo *dl)
 		return 0;
 
 #define FILENAME	"filename="
-#define BUFFERSZ	(NAME_MAX * 3 + 1)
 	if ((p = strstr(buf, FILENAME))) {
-		char tmp[BUFFERSZ];
-		p = memccpy(tmp, p + sizeof(FILENAME) - 1, '\n', BUFFERSZ);
+		p = memccpy(tmp, p + sizeof(FILENAME) - 1, '\n',
+				DLINFO_ENCODE_NAME_MAX);
 		if (!p) {
 			err_sys("memccpy");
 			return -1;
 		}
 		strncpy(dl->di_filename, string_decode(tmp),
-			DLINFO_NAME_MAX);
+			sizeof(dl->di_filename));
 		return 0;
 	}
-#undef FILENAME
-#undef BUFFERSZ
 
 	/* if filename parsing failed, then parsing filename from url. */
-	if ((p = strrchr(dl->di_url, '/')))
-		strcpy(dl->di_filename, p + 1);
-
-	return 0;
+	if ((p = strrchr(dl->di_url, '/'))) {
+		strcpy(tmp, p + 1);
+		strncpy(dl->di_filename, string_decode(tmp),
+			sizeof(dl->di_filename));
+		return 0;
+	}
+	return -1;
 }
 
 /*
@@ -378,11 +379,12 @@ static char *dlinfo_set_prompt(struct dlinfo *dl)
 	}
 
 	snprintf(prompt, sizeof(prompt), "\e[7mDownload: ");
-	snprintf(file_size_str, sizeof(file_size_str), "%.1f%s ",
+	snprintf(file_size_str, sizeof(file_size_str), "%6.1f%-5s",
 		 orig_size / ((double) (1 << (10 * flags))),
 		 (flags == 0) ? "Bytes" :
 		 (flags == 1) ? "KB" :
-		 (flags == 2) ? "MB" : (flags == 3) ? "GB" : "TB");
+		 (flags == 2) ? "MB" :
+		 (flags == 3) ? "GB" : "TB");
 
 	sig_cnt = 0;
 
@@ -437,7 +439,7 @@ static void dlinfo_sigalrm_handler(int signo)
 
 	dlinfo_set_prompt_dyn();
 	printf("\r" "%*s", winsize_column, "");
-	printf("\r%s   %4ld%s/s  %s%%  \e[31m[%3d/%-3d]\e[0m", prompt,
+	printf("\r%s %4ld%s/s  %s%% \e[31m[%2d/%-2d]\e[0m", prompt,
 	       (long)speed,
 	       (flags & 0x2) ? "KB" :
 	       (flags & 0x4) ? "MB" : "GB",
