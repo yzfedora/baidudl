@@ -1,25 +1,26 @@
 PROGS	= bdpandl
-TOOLS	= bcmp bsearch
+TOOLS	= bcmp bsearch repair
 OBJS	= dlinfo.o dlpart.o dlcommon.o scrolling_display.o
-FLAGS	= -Wall -lpthread -lerr
+CFLAGS	= -Wall -lpthread -lerr
 CC	= gcc
 
 
 ALL: $(PROGS) $(TOOLS)
 
 debug: ALL
-debug: FLAGS+=-g
+debug: CFLAGS+=-g
 
 %.o: %.c
-	$(CC) -c $^ $(FLAGS)
+	$(CC) -c $^ $(CFLAGS)
 
 bdpandl: bdpandl.c $(OBJS)
-	$(CC) -o $@ $^ $(FLAGS)
+	$(CC) -o $@ $^ $(CFLAGS)
 
 bcmp: bcmp.c
 	$(CC) -o $@ $^ -lerr
-
 bsearch: bsearch.c
+	$(CC) -o $@ $^ -lerr
+repair: repair.c dlcommon.o
 	$(CC) -o $@ $^ -lerr
 
 .PHONY: clean

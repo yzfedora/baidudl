@@ -8,8 +8,8 @@
 #define BUFSZ	(1 << 20)
 #define OUTLEN	(64)
 
-static char *bstrstr(char *src, unsigned int src_len,
-			char *dst, unsigned int dst_len)
+static char *bstrstr(char *src, size_t src_len,
+			char *dst, size_t dst_len)
 {
 	char *p1 = src;
 	char *p2 = dst;
@@ -49,9 +49,9 @@ static void bsearch(int fd, char *str)
 	while ((nread = read(fd, buf, sizeof(buf)))) {
 		printf("\rmatching ... %5.1f", (double)offset * 100 / total);
 		
-		ptr = buf;
-		ptr_len = nread;
 		if (nread > 0) {
+			ptr = buf;
+			ptr_len = nread;
 match_next:
 			if (!(match = bstrstr(ptr, ptr_len, str, str_len))) {
 				offset += nread;

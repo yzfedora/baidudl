@@ -203,7 +203,7 @@ static int dlinfo_recv_and_parsing(struct dlinfo *dl)
 			return -1;
 		}
 		strncpy(dl->di_filename, string_decode(tmp),
-			sizeof(dl->di_filename));
+			sizeof(dl->di_filename) - 1);
 		return 0;
 	}
 
@@ -211,7 +211,7 @@ static int dlinfo_recv_and_parsing(struct dlinfo *dl)
 	if ((p = strrchr(dl->di_url, '/'))) {
 		strcpy(tmp, p + 1);
 		strncpy(dl->di_filename, string_decode(tmp),
-			sizeof(dl->di_filename));
+			sizeof(dl->di_filename) - 1);
 		return 0;
 	}
 	return -1;
@@ -356,8 +356,7 @@ static int dlinfo_open_local_file(struct dlinfo *dl)
 			 * same file already exists. try recovery records
 			 */
 			flags &= ~O_EXCL;
-			if ((fd =
-			     open(dl->di_filename, flags, PERMS)) == -1)
+			if ((fd = open(dl->di_filename, flags, PERMS)) == -1)
 				err_exit("open");
 
 			dorecovery = 1;

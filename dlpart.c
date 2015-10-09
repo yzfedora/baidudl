@@ -32,7 +32,6 @@
 #define DLPART_NEW_TIMES	120
 static pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
 
-
 /*
  * Suppoort continuous download:
  * | file | nthreads | 1th-thread range | 2th-thread range |...
@@ -83,8 +82,7 @@ static void dlpart_send_header(struct dlpart *dp)
 
 static int dlpart_recv_header(struct dlpart *dp)
 {
-	struct dlinfo *dl = dp->dp_info;
-	int is_header = 1, code;
+	int is_header = 1;
 	ssize_t start, end;
 	char *sp, *p, *ep;
 
@@ -102,17 +100,10 @@ static int dlpart_recv_header(struct dlpart *dp)
 		
 		err_dbg(2, "\n----------Receiving Heading(%ld-%ld)----------\n"
 			"%s", dp->dp_start, dp->dp_end, dp->dp_buf);
-		
-		/* multi-thread download, the response code should be 206. */
-		code = getrcode(dp->dp_buf);
-		if (code != 206 && code != 200) {
-			goto out;
-		} else if (code == 200 && dl->di_nthreads != 1) {
-			err_msg("Host: %s does not support multi-thread "
-				"download.\n try option '-n 1' again.\n",
-				dl->di_host);
-		}
 
+		/* multi-thread download, the response code should be 206. */
+		if (getrcode(dp->dp_buf) != 206)
+			goto out;
 
 #define RANGE	"Content-Range: bytes "
 		if ((p = strstr(dp->dp_buf, RANGE))) {
@@ -140,32 +131,6 @@ out:
 	return -1;
 }
 
-static char *bstrstr(char *src, unsigned int src_len,
-			char *dst, unsigned int dst_len)
-{
-	char *p1 = src;
-	char *p2 = dst;
-	char *saved_ptr;
-	unsigned int matched = 0;
-
-	while (p1 < src + src_len) {
-		if (*p1++ == *p2++) {
-			if (++matched == dst_len) {
-				return (p1 - dst_len);
-			}
-			if (matched == 1)
-				saved_ptr = p1;
-		} else {
-			if (matched > 0)
-				p1 = saved_ptr;
-			p2 = dst;
-			matched = 0;
-		}
-	}
-
-	return NULL;
-}
-
 static void dlpart_read(struct dlpart *dp)
 {
 	/* 
@@ -173,22 +138,6 @@ static void dlpart_read(struct dlpart *dp)
 	 * set correctly
 	 */
 	dp->dp_nrd = read(dp->dp_remote, dp->dp_buf, DLPART_BUFSZ);
-	
-	/*
-	 * Use to debug, find sometimes store "{"error_code"...}" int local
-	 * file.
-	 */
-	if (bstrstr(dp->dp_buf, dp->dp_nrd > 0 ? dp->dp_nrd : 0,
-					"request_id", 10)) {
-		printf("\n*********** Detected ERROR *************");
-		printf("\nErrno: %d", errno);
-		printf("\nThread No: %d", dp->dp_no);
-		printf("\nReference socket: %d", dp->dp_remote);
-		printf("\nRange from: %ld to %ld", dp->dp_start, dp->dp_end);
-		printf("\nReceived length: %d", dp->dp_nrd);
-		printf("\nReceived data:\n%s", dp->dp_buf);
-		pthread_exit(NULL);
-	}
 }
 
 /*
