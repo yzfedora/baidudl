@@ -123,12 +123,14 @@ char *scrolling_display_ptr(unsigned int *len, unsigned int *padding)
 	if (l > scrolling_display_window_size) {
 		*len -= t;
 		l -= (1 == t) ? 1 : 2;
-		if (padding)
-			*padding = scrolling_display_window_size - l;
 	}
 
+	if (l < scrolling_display_window_size && padding)
+		*padding = scrolling_display_window_size - l;
+
 	if (likely(*tmp))
-		scrolling_display_curr += utf8_char_length(scrolling_display_curr);
+		scrolling_display_curr += utf8_char_length(
+					scrolling_display_curr);
 	else
 		scrolling_display_curr = scrolling_display_orig;
 
