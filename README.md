@@ -1,7 +1,7 @@
 # baidudl
 This is a multi-thread download tool for linux, it main purpose is used to download from pan.baidu.com. (for Chinese: 这是一个Linux下的多线程下载工具，其初衷是为了用于baidu网盘的多线程下载。初期没有实现对批量下载的地址解析，可能会在以后版本添加更成熟的批量下载方式，但现在您仍需要手动添加地址到一个文件中用于批量下载。)
 
-![image](https://github.com/yzfedora/baidudl/demo.png)
+![image](https://github.com/yzfedora/baidudl/raw/master/demo.png)
 # Usage
 	Your need download liberr also.
 	git clone https://github.com/yzfedora/liberr.git
