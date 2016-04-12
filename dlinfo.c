@@ -117,8 +117,9 @@ int dlinfo_connect(struct dlinfo *dl)
 	hints.ai_family = AF_UNSPEC;
 	hints.ai_socktype = SOCK_STREAM;
 
+	errno = 0;
 	if ((s = getaddrinfo(dl->di_host, dl->di_serv, &hints, &res)) != 0)
-		err_exit("getaddrinfo: %s\n", gai_strerror(s));
+		err_exit("getaddrinfo: %s", gai_strerror(s));
 
 	for (ai = res; ai; ai = ai->ai_next) {
 		if ((fd = socket(ai->ai_family, ai->ai_socktype,

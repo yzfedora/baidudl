@@ -1,14 +1,15 @@
-PROGS	= bdpandl
-TOOLS	= bcmp bsearch repair
-OBJS	= dlinfo.o dlpart.o dlcommon.o scrolling_display.o
-CFLAGS	= -Wall -lpthread -lerr
-CC	= gcc
+PROGS	:= bdpandl
+TOOLS	:= bcmp bsearch repair
+OBJS	:= dlinfo.o dlpart.o dlcommon.o scrolling_display.o
+CFLAGS	:= -Wall -lpthread -lerr
+CC	:= gcc
 
 
 ALL: $(PROGS) $(TOOLS)
 
 debug: ALL
 debug: CFLAGS+=-g
+
 
 %.o: %.c
 	$(CC) -c $^ $(CFLAGS)
@@ -23,7 +24,7 @@ bsearch: bsearch.c
 repair: repair.c dlcommon.o
 	$(CC) -o $@ $^ -lerr
 
-.PHONY: clean
+.PHONY: ALL debug clean install uninstall
 clean:
 	$(RM) $(OBJS) $(PROGS) $(TOOLS) $(wildcard *.h.gch)
 
