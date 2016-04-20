@@ -86,7 +86,7 @@ POST_INSTALL = :
 NORMAL_UNINSTALL = :
 PRE_UNINSTALL = :
 POST_UNINSTALL = :
-bin_PROGRAMS = bdpandl$(EXEEXT)
+bin_PROGRAMS = bdpandl$(EXEEXT) bdpandl-decode$(EXEEXT)
 subdir = src
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
 am__aclocal_m4_deps = $(top_srcdir)/configure.ac
@@ -105,6 +105,11 @@ bdpandl_OBJECTS = $(am_bdpandl_OBJECTS)
 bdpandl_LDADD = $(LDADD)
 bdpandl_LINK = $(CCLD) $(AM_CFLAGS) $(CFLAGS) $(bdpandl_LDFLAGS) \
 	$(LDFLAGS) -o $@
+am_bdpandl_decode_OBJECTS = bdpandl-decode.$(OBJEXT)
+bdpandl_decode_OBJECTS = $(am_bdpandl_decode_OBJECTS)
+bdpandl_decode_LDADD = $(LDADD)
+bdpandl_decode_LINK = $(CCLD) $(AM_CFLAGS) $(CFLAGS) \
+	$(bdpandl_decode_LDFLAGS) $(LDFLAGS) -o $@
 AM_V_P = $(am__v_P_@AM_V@)
 am__v_P_ = $(am__v_P_@AM_DEFAULT_V@)
 am__v_P_0 = false
@@ -133,8 +138,8 @@ AM_V_CCLD = $(am__v_CCLD_@AM_V@)
 am__v_CCLD_ = $(am__v_CCLD_@AM_DEFAULT_V@)
 am__v_CCLD_0 = @echo "  CCLD    " $@;
 am__v_CCLD_1 = 
-SOURCES = $(bdpandl_SOURCES)
-DIST_SOURCES = $(bdpandl_SOURCES)
+SOURCES = $(bdpandl_SOURCES) $(bdpandl_decode_SOURCES)
+DIST_SOURCES = $(bdpandl_SOURCES) $(bdpandl_decode_SOURCES)
 am__can_run_installinfo = \
   case $$AM_UPDATE_INFO_DIR in \
     n|no|NO) false;; \
@@ -250,6 +255,8 @@ top_builddir = @top_builddir@
 top_srcdir = @top_srcdir@
 bdpandl_SOURCES = bdpandl.c dlcommon.c dlcommon.h dlinfo.c dlinfo.h dlpart.c dlpart.h scrolling_display.c scrolling_display.h
 bdpandl_LDFLAGS = -Wall -lpthread -lerr
+bdpandl_decode_SOURCES = bdpandl-decode.c
+bdpandl_decode_LDFLAGS = -Wall
 all: all-am
 
 .SUFFIXES:
@@ -330,12 +337,17 @@ bdpandl$(EXEEXT): $(bdpandl_OBJECTS) $(bdpandl_DEPENDENCIES) $(EXTRA_bdpandl_DEP
 	@rm -f bdpandl$(EXEEXT)
 	$(AM_V_CCLD)$(bdpandl_LINK) $(bdpandl_OBJECTS) $(bdpandl_LDADD) $(LIBS)
 
+bdpandl-decode$(EXEEXT): $(bdpandl_decode_OBJECTS) $(bdpandl_decode_DEPENDENCIES) $(EXTRA_bdpandl_decode_DEPENDENCIES) 
+	@rm -f bdpandl-decode$(EXEEXT)
+	$(AM_V_CCLD)$(bdpandl_decode_LINK) $(bdpandl_decode_OBJECTS) $(bdpandl_decode_LDADD) $(LIBS)
+
 mostlyclean-compile:
 	-rm -f *.$(OBJEXT)
 
 distclean-compile:
 	-rm -f *.tab.c
 
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/bdpandl-decode.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/bdpandl.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/dlcommon.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/dlinfo.Po@am__quote@
