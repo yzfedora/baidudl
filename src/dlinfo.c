@@ -450,20 +450,15 @@ static char *dlinfo_get_percentage(void)
 
 static void dlinfo_sigalrm_handler(int signo)
 {
-	int flags = 1;
 	ssize_t speed = bytes_per_sec;
 
-	do {
-		speed >>= 10;
-		flags <<= 1;
-	} while (speed > 1024);
+	speed >>= 10;
 
 	dlinfo_set_prompt_dyn();
 	printf("\r" "%*s", winsize_column, "");
 	printf("\r%s %4ld%s/s  %s%% \e[31m[%2d/%-2d]\e[0m", prompt,
 	       (long)speed,
-	       (flags & 0x2) ? "KB" :
-	       (flags & 0x4) ? "MB" : "GB",
+	       "KB",
 	       dlinfo_get_percentage(),
 	       threads_curr, threads_total);
 
