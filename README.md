@@ -34,9 +34,5 @@ This is a multi-thread download tool for linux, it main purpose is used to downl
 	link or windows to download. this link just we need.
 
 
-	现在百度抽风了, 有些服务器改用HTTPS下载链接了, 你可以直接把链接中的
-	"https"改为"http", 这样也能下载. 现存的代码不依赖于libcurl, 所以不支持
-	https下载, 可能以后我会添加相关代码支持https. :-)
-
 	Any suggestions or bugs you can report to <yzfedora@gmail.com>
 						Thanks in advance!
