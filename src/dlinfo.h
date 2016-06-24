@@ -24,6 +24,7 @@
 #define DLINFO_SRV_SZ	64
 #define DLINFO_HST_SZ	512
 #define DLINFO_URL_SZ	4096
+#define DLINFO_URI_SZ	4096
 #define DLINFO_NAME_MAX	(NAME_MAX + 1)
 #define DLINFO_ENCODE_NAME_MAX	(NAME_MAX * 3 + 1)
 
@@ -74,6 +75,7 @@ struct dlinfo {
 	char	di_serv[DLINFO_SRV_SZ];	/* service type */
 	char	di_host[DLINFO_HST_SZ];	/* host name or IP address */
 	char	di_url[DLINFO_URL_SZ];	/* original download url request */
+	char	di_uri[DLINFO_URI_SZ];
 
 	struct dlthreads *di_threads;
 	

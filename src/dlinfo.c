@@ -82,22 +82,41 @@ static void *download(void *arg);
 static char *dlinfo_init(struct dlinfo *dl)
 {
 	char *start;
-	char *end;
 	char *ret = dl->di_host;
 	char *url = dl->di_url;
+	char *slash, *ptr;
+	char saved;
 
 	if (!(start = strstr(url, "://"))) {
 		start = url;
 	} else {		/* parsing service name */
-		memccpy(dl->di_serv, url, ':', DLINFO_SRV_SZ);
-		dl->di_serv[strlen(dl->di_serv) - 1] = 0;
 		start += 3;
 	}
 
-	if (!(end = strstr(start, "/")))
-		end = url + strlen(url);
 
-	strncpy(ret, start, end - start);
+	if ((slash = strchr(start, '/'))) {
+		saved = *slash;
+		*slash = 0;
+		snprintf(dl->di_uri, DLINFO_URI_SZ, "/%s", slash + 1);
+	} else {
+		strncpy(dl->di_uri, "/", DLINFO_URI_SZ);
+	}
+
+	if ((ptr = strchr(start, ':'))) {
+		char c = *ptr;
+		*ptr = 0;
+		strncpy(dl->di_host, start, DLINFO_HST_SZ);
+
+		strncpy(dl->di_serv, ptr + 1, DLINFO_SRV_SZ);
+		*ptr = c;
+	} else {
+		strncpy(dl->di_host, start, DLINFO_HST_SZ);
+	}
+
+
+	if (slash)
+		*slash = saved;
+
 	return ret;
 }
 
@@ -119,7 +138,8 @@ int dlinfo_connect(struct dlinfo *dl)
 
 	errno = 0;
 	if ((s = getaddrinfo(dl->di_host, dl->di_serv, &hints, &res)) != 0)
-		err_exit("getaddrinfo: %s", gai_strerror(s));
+		err_exit("getaddrinfo: %s, host: %s:%s", gai_strerror(s),
+			 dl->di_host, dl->di_serv);
 
 	for (ai = res; ai; ai = ai->ai_next) {
 		if ((fd = socket(ai->ai_family, ai->ai_socktype,
@@ -153,8 +173,7 @@ static void dlinfo_send_request(struct dlinfo *dl)
 
 	/* not using HEAD request, sometime HEAD will produce 400 error. */
 	sprintf(buf, "GET %s HTTP/1.1\r\n"
-		"Host: %s\r\n\r\n",
-		geturi(dl->di_url, dl->di_host), dl->di_host);
+		"Host: %s\r\n\r\n", dl->di_uri, dl->di_host);
 	writen(dl->di_remote, buf, strlen(buf));
 	err_dbg(2, "-------------- Send Requst (Meta info) -----------\n"
 			"%s", buf);

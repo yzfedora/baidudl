@@ -72,7 +72,7 @@ static void dlpart_send_header(struct dlpart *dp)
 	sprintf(sbuf, "GET %s HTTP/1.1\r\n"
 		      "Host: %s\r\n"
 		      "Range: bytes=%ld-%ld\r\n\r\n",
-		      geturi(dl->di_url, dl->di_host), dp->dp_info->di_host,
+		      dp->dp_info->di_uri, dp->dp_info->di_host,
 		      (long)dp->dp_start, (long)dp->dp_end);
 
 	err_dbg(2, "\n---------------Sending Header(%ld-%ld)----------------\n"

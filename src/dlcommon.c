@@ -45,19 +45,6 @@ int getwcol(void)
 	return size.ws_col;
 }
 
-/* return a pointer to start of URI on success, or no any URI can be find,
- * NULL will be returned. */
-char *geturi(const char *s, const char *u)
-{
-	char *p = strstr(s, u);
-
-	if (!p)
-		return NULL;
-
-	p += strlen(u);
-	return p;
-}
-
 ssize_t writen(int fd, const void *buf, size_t count)
 {
 	int nwrt;

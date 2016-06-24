@@ -35,7 +35,7 @@ static void usage(const char *progname)
 		"    -n threads   specify the number of thread to download\n"
 		"    -o filename  specify the filename of output\n"
 		"    -l file      import urls from file(url may expire)\n"
-		"    -h	          display the help\n\n");
+		"    -h           display the help\n\n");
 	exit(EXIT_FAILURE);
 }
 
@@ -72,7 +72,6 @@ static void download_from_file(const char *listfile, int nts)
 				break;	/* end-of-file */
 			continue;
 		}
-		
 		if (lineptr[num - 1] == '\n')
 			lineptr[num - 1] = 0;
 
