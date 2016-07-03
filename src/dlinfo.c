@@ -476,11 +476,19 @@ static void dlinfo_sigalrm_handler(int signo)
 
 	dlinfo_set_prompt_dyn();
 	printf("\r" "%*s", winsize_column, "");
-	printf("\r%s %4ld%s/s  %s%% \e[31m[%2d/%-2d]\e[0m", prompt,
-	       (long)speed,
-	       "KB",
-	       dlinfo_get_percentage(),
-	       threads_curr, threads_total);
+    if (speed < 1000) {
+        printf("\r%s %4ld%s/s  %s%% \e[31m[%2d/%-2d]\e[0m", prompt,
+               (long)speed,
+               "KB",
+               dlinfo_get_percentage(),
+               threads_curr, threads_total);
+    } else if (speed > 1000) {
+        printf("\r%s %.3g%s/s  %s%% \e[31m[%2d/%-2d]\e[0m", prompt,
+               (long)speed / 1000.0,
+               "MB",
+               dlinfo_get_percentage(),
+               threads_curr, threads_total);
+    }
 
 	fflush(stdout);
 	bytes_per_sec = 0;
