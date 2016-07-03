@@ -6,7 +6,7 @@ AC_INIT([bdpandl], [1.0], [yzfedora@gmail.com])
 AM_INIT_AUTOMAKE
 AC_CONFIG_SRCDIR([src])
 AC_CONFIG_HEADERS([config.h])
-
+AM_INIT_AUTOMAKE([foreign])
 
 # Checks for programs.
 # AC_PROG_CXX

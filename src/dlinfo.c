@@ -13,6 +13,7 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  *************************************************************************/
+#define _GNU_SOURCE
 #include <unistd.h>
 #include <stdlib.h>		/* strtol() */
 #include <string.h>
@@ -205,17 +206,17 @@ static int dlinfo_recv_and_parsing(struct dlinfo *dl)
 		return -1;
 
 #define _CONTENT_LENGTH	"Content-Length: "
-	if (NULL != (p = strstr(buf, _CONTENT_LENGTH))) {
+	if (NULL != (p = strcasestr(buf, _CONTENT_LENGTH))) {
 		dl->di_length = strtol(p + sizeof(_CONTENT_LENGTH) - 1,
 				       NULL, 10);
-	}
+    }
 
 	/* User specified filename */
 	if (dl->di_filename && *dl->di_filename)
 		return 0;
 
 #define FILENAME	"filename="
-	if ((p = strstr(buf, FILENAME))) {
+	if ((p = strcasestr(buf, FILENAME))) {
 		p = memccpy(tmp, p + sizeof(FILENAME) - 1, '\n',
 				DLINFO_ENCODE_NAME_MAX);
 		if (!p) {
