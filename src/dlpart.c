@@ -25,7 +25,8 @@
 #include <sys/select.h>
 #include <fcntl.h>
 #include <errno.h>
-#include <err_handler.h>
+
+#include "err_handler.h"
 #include "dlpart.h"
 #include "dlcommon.h"
 

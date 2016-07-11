@@ -11,7 +11,8 @@
 #include <limits.h>
 #include <signal.h>
 #include <sys/time.h>
-#include <err_handler.h>
+
+#include "err_handler.h"
 
 #define	BUFSZ		(1 << 20)
 #define min(x, y)	((x < y) ? x : y)

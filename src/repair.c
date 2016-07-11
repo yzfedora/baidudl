@@ -4,7 +4,8 @@
 #include <errno.h>
 #include <sys/stat.h>
 #include <fcntl.h>
-#include <err_handler.h>
+
+#include "err_handler.h"
 #include "dlcommon.h"
 
 struct repair_range {
