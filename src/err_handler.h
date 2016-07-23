@@ -16,6 +16,7 @@
 #ifndef _ERR_HANDLER_H
 #define _ERR_HANDLER_H
 #include <errno.h>
+#include <syslog.h>
 
 /* #undef __GNUC__ */
 #ifdef __GNUC__

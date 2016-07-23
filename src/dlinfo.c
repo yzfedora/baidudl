@@ -58,8 +58,9 @@
 		no = (pkt)->arg_no;			\
 	} while (0)
 
-
 #define PACKET_ARGS_FREE(pkt)	do { free(pkt); } while (0)
+
+
 /*
  * Protect the variables 'threads_total' and 'threads_curr' in multi-threads.
  */
@@ -88,7 +89,7 @@ static pthread_mutex_t memory_lock = PTHREAD_MUTEX_INITIALIZER;
 #define DLINFO_TRYTIMES_MAX	30
 #define DLINFO_NEW_TRYTIMES_MAX	3
 /* Reserved 50 column for others prompt */
-#define DLINFO_PROMPT_RESERVED	48
+#define DLINFO_PROMPT_RESERVED	49
 
 static int dorecovery;
 static int try_ignore_records;
@@ -236,10 +237,10 @@ static int dlinfo_recv_and_parsing(struct dlinfo *dl)
 	if (NULL != (p = strcasestr(buf, _CONTENT_LENGTH))) {
 		dl->di_length = strtol(p + sizeof(_CONTENT_LENGTH) - 1,
 				       NULL, 10);
-    }
+	}
 
 	/* User specified filename */
-	if (dl->di_filename && *dl->di_filename)
+	if (*dl->di_filename)
 		return 0;
 
 #define FILENAME	"filename="
@@ -370,7 +371,7 @@ static ssize_t dlinfo_records_recovery_all(struct dlinfo *dl)
 			errno = s;
 			err_exit("pthread_create");
 		}
-		
+
 		nedl += (end - start) + 1;
 next_range:
 		dt = &((*dt)->next);
@@ -446,19 +447,19 @@ static char *dlinfo_set_prompt(struct dlinfo *dl)
 		flags++;
 	}
 
-	snprintf(prompt, sizeof(prompt), "\e[7mDownload: ");
+	snprintf(prompt, sizeof(prompt), "\e[7m\e");
 	snprintf(file_size_str, sizeof(file_size_str), "%6.1f%-5s",
 		 orig_size / ((double) (1 << (10 * flags))),
 		 (flags == 0) ? "Bytes" :
-		 (flags == 1) ? "KB" :
-		 (flags == 2) ? "MB" :
-		 (flags == 3) ? "GB" : "TB");
+		 (flags == 1) ? "KiB" :
+		 (flags == 2) ? "MiB" :
+		 (flags == 3) ? "GiB" : "TiB");
 
 	sig_cnt = 0;
 
 	winsize_column = getwcol();	/* initialize window column. */
 
-	/* 
+	/*
 	 * Initial roll displayed string, and expect maximum length.
 	 */
 	if (scrolling_display_init(dl->di_filename, winsize_column -
@@ -474,7 +475,7 @@ static void dlinfo_set_prompt_dyn(void)
 	unsigned int len, padding;
 	char *ptr = scrolling_display_ptr(&len, &padding);
 
-	snprintf(prompt + 14, sizeof(prompt) - 14, "%.*s  %*s%s", len, ptr,
+	snprintf(prompt + 4, sizeof(prompt) - 4, "%.*s  %*s%s", len, ptr,
 		 padding, "", file_size_str);
 	sig_cnt++;
 }
@@ -484,15 +485,33 @@ static void dlinfo_set_prompt_dyn(void)
  * example:
  * 	99.97 may be round up to 100.0
  */
+#define DLINFO_PERCENTAGE_STR_MAX	32
 static char *dlinfo_get_percentage(void)
 {
-#define DLINFO_PERCENTAGE_STR_MAX	32
 	int len;
 	static char percentage_str[DLINFO_PERCENTAGE_STR_MAX];
+
 	len = snprintf(percentage_str, sizeof(percentage_str), "%6.2f",
 			(double)total_read * 100 / total);
-	percentage_str[len - 1] = 0;
+
+	percentage_str[len - 1] = 0;        /* prevent snprintf round up */
 	return percentage_str;
+}
+
+#define DLINFO_ESTIMATE_STR_MAX 16
+static char *dlinfo_get_estimate(void)
+{
+	int hours, mins, secs, len;
+	static char estimate_str[DLINFO_ESTIMATE_STR_MAX];
+
+	secs = (total - total_read) / ((bytes_per_sec > 0) ? bytes_per_sec : 1024);
+	hours = secs / 3600;
+	secs = secs % 3600;
+	mins = secs / 60;
+	secs = secs % 60;
+	hours = (hours > 99) ? 99 : hours;
+	len = snprintf(estimate_str, sizeof(estimate_str), "%02d:%02d:%02d", hours, mins, secs);
+	return estimate_str;
 }
 
 static void dlinfo_sigalrm_handler(int signo)
@@ -503,19 +522,17 @@ static void dlinfo_sigalrm_handler(int signo)
 
 	dlinfo_set_prompt_dyn();
 	printf("\r" "%*s", winsize_column, "");
-    if (speed < 1000) {
-        printf("\r%s %4ld%s/s  %s%% \e[31m[%2d/%-2d]\e[0m", prompt,
-               (long)speed,
-               "KB",
-               dlinfo_get_percentage(),
-               threads_curr, threads_total);
-    } else if (speed > 1000) {
-        printf("\r%s %.3g%s/s  %s%% \e[31m[%2d/%-2d]\e[0m", prompt,
-               (long)speed / 1000.0,
-               "MB",
-               dlinfo_get_percentage(),
-               threads_curr, threads_total);
-    }
+
+	if (speed < 1000) {
+		printf("\r%s %s%%  %4ld%s/s  %8s \e[31m[%2d/%-2d]\e[0m",
+		       prompt, dlinfo_get_percentage(), (long)speed, "KiB",
+		       dlinfo_get_estimate(), threads_curr, threads_total);
+	} else if (speed > 1000) {
+		printf("\r%s %s%%  %4.3g%s/s  %8s \e[31m[%2d/%-2d]\e[0m",
+		       prompt, dlinfo_get_percentage(),
+		       (long)speed / 1000.0, "MiB", dlinfo_get_estimate(),
+		       threads_curr, threads_total);
+	}
 
 	fflush(stdout);
 	bytes_per_sec = 0;

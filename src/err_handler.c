@@ -228,7 +228,7 @@ static void err_internal(bool doexit, bool doerr, int level,
 	if (!_err_daemon)
 		write(STDERR_FILENO, buf, len);
 	else
-		syslog(level, buf);
+		syslog(level, buf, len);
 
 	if (doexit)
 		exit(EXIT_FAILURE);
