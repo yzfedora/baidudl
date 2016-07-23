@@ -14,10 +14,10 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  *************************************************************************/
 #define _GNU_SOURCE
+#include <stdio.h>
 #include <unistd.h>
 #include <stdlib.h>		/* strtol() */
 #include <string.h>
-#include <malloc.h>
 #include <signal.h>
 #include <pthread.h>
 #include <sys/fcntl.h>
@@ -27,12 +27,39 @@
 #include <netdb.h>
 #include <errno.h>
 
+#if (defined(__APPLE__) && defined(__MACH__))
+# include <malloc/malloc.h>
+#endif
+
 #include "err_handler.h"
 #include "dlinfo.h"
 #include "dlpart.h"
 #include "dlcommon.h"
 #include "scrolling_display.h"
 
+
+#define PACKET_ARGS(pkt, dl, dp, start, end, no) 	\
+	do {						\
+		if ((pkt = malloc(sizeof(*(pkt))))) {	\
+			(pkt)->arg_dl = dl;		\
+			(pkt)->arg_dp = dp;		\
+			(pkt)->arg_start = start;	\
+			(pkt)->arg_end = end;		\
+			(pkt)->arg_no = no;		\
+		}					\
+	} while (0)
+
+#define UNPACKET_ARGS(pkt, dl, dp, start, end, no)	\
+	do {						\
+		dl = (pkt)->arg_dl;			\
+		dp = (pkt)->arg_dp;			\
+		start = (pkt)->arg_start;		\
+		end = (pkt)->arg_end;			\
+		no = (pkt)->arg_no;			\
+	} while (0)
+
+
+#define PACKET_ARGS_FREE(pkt)	do { free(pkt); } while (0)
 /*
  * Protect the variables 'threads_total' and 'threads_curr' in multi-threads.
  */

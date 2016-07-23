@@ -43,28 +43,6 @@ struct packet_args {
 	int		arg_no;
 };
 
-#define PACKET_ARGS(pkt, dl, dp, start, end, no) 	\
-	do {						\
-		if ((pkt = malloc(sizeof(*(pkt))))) {	\
-			(pkt)->arg_dl = dl;		\
-			(pkt)->arg_dp = dp;		\
-			(pkt)->arg_start = start;	\
-			(pkt)->arg_end = end;		\
-			(pkt)->arg_no = no;		\
-		}					\
-	} while (0)
-
-#define UNPACKET_ARGS(pkt, dl, dp, start, end, no)	\
-	do {						\
-		dl = (pkt)->arg_dl;			\
-		dp = (pkt)->arg_dp;			\
-		start = (pkt)->arg_start;		\
-		end = (pkt)->arg_end;			\
-		no = (pkt)->arg_no;			\
-	} while (0)
-
-#define PACKET_ARGS_FREE(pkt)	do { free(pkt); } while (0)
-
 struct dlinfo {
 	int	di_remote;
 	int	di_local;

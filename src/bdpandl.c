@@ -25,6 +25,9 @@
 #include <err_handler.h>
 #include "dlinfo.h"
 
+#if (defined(__APPLE__) && defined(__MACH__))
+# include <malloc/malloc.h>
+#endif
 
 static void usage(const char *progname)
 {
