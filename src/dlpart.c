@@ -102,7 +102,7 @@ static int dlpart_recv_header(struct dlpart *dp)
 			dp->dp_nrd -= (sp - dp->dp_buf);
 			is_header = 0;
 		}
-		
+
 		err_dbg(2, "\n----------Receiving Heading(%ld-%ld)----------\n"
 			"%s", dp->dp_start, dp->dp_end, dp->dp_buf);
 
@@ -150,7 +150,7 @@ static void dlpart_read(struct dlpart *dp)
  * And the offset 'dp->dp_start' will be updated also.
  */
 static void dlpart_write(struct dlpart *dp, ssize_t *total_read,
-		ssize_t *bytes_per_sec)
+			 ssize_t *bytes_per_sec)
 {
 	int s, n, len = dp->dp_nrd;
 	char *buf = dp->dp_buf;

@@ -607,7 +607,7 @@ static void *download(void *arg)
 	UNPACKET_ARGS((struct packet_args *)arg, dl, dp, orig_start,
 			orig_end, orig_no);
 	PACKET_ARGS_FREE((struct packet_args *)arg);
-	
+
 	if (!(*dp = dlpart_new(dl, orig_start, orig_end, orig_no))) {
 		err_msg("error, try download range: %ld - %ld again",
 						orig_start, orig_end);
@@ -636,7 +636,7 @@ static void *download(void *arg)
 			if (errno == EAGAIN || errno == EWOULDBLOCK) {
 				if (btimes++ >= DLINFO_TRYTIMES_MAX)
 					goto try_connect_again;
-				usleep(1000000 + btimes * 100000);
+				usleep(500000 + btimes * 100000);
 				continue;
 			}
 
