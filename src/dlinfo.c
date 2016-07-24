@@ -501,7 +501,7 @@ static char *dlinfo_get_percentage(void)
 #define DLINFO_ESTIMATE_STR_MAX 16
 static char *dlinfo_get_estimate(void)
 {
-	int hours, mins, secs, len;
+	int hours, mins, secs;
 	static char estimate_str[DLINFO_ESTIMATE_STR_MAX];
 
 	secs = (total - total_read) / ((bytes_per_sec > 0) ? bytes_per_sec : 1024);
@@ -509,8 +509,13 @@ static char *dlinfo_get_estimate(void)
 	secs = secs % 3600;
 	mins = secs / 60;
 	secs = secs % 60;
-	hours = (hours > 99) ? 99 : hours;
-	len = snprintf(estimate_str, sizeof(estimate_str), "%02d:%02d:%02d", hours, mins, secs);
+
+	if (hours < 100)
+		snprintf(estimate_str, sizeof(estimate_str), "%02d:%02d:%02d",
+			 hours, mins, secs);
+	else
+		snprintf(estimate_str, sizeof(estimate_str), "%3d days", hours / 24);
+
 	return estimate_str;
 }
 
