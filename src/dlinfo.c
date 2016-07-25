@@ -89,7 +89,7 @@ static pthread_mutex_t memory_lock = PTHREAD_MUTEX_INITIALIZER;
 #define DLINFO_TRYTIMES_MAX	30
 #define DLINFO_NEW_TRYTIMES_MAX	3
 /* Reserved 50 column for others prompt */
-#define DLINFO_PROMPT_RESERVED	49
+#define DLINFO_PROMPT_RESERVED	46
 
 static int dorecovery;
 static int try_ignore_records;
@@ -519,24 +519,50 @@ static char *dlinfo_get_estimate(void)
 	return estimate_str;
 }
 
+static int dlinfo_get_strnum(int curr, int total)
+{
+	int nstr = 0;
+
+	if (curr < 10)
+		nstr += 1;
+	else if (curr < 100)
+		nstr += 2;
+	else if (curr < 1000)
+		nstr += 3;
+	else
+		nstr += 4;
+
+	if (total < 10)
+		nstr += 1;
+	else if (total < 100)
+		nstr += 2;
+	else if (total < 1000)
+		nstr += 3;
+	else
+		nstr += 4;
+	return nstr;
+}
+
 static void dlinfo_sigalrm_handler(int signo)
 {
 	ssize_t speed = bytes_per_sec;
+	int curr = threads_curr, total = threads_total;
 
 	speed >>= 10;
 
+	scrolling_display_setsize(winsize_column - DLINFO_PROMPT_RESERVED - dlinfo_get_strnum(curr, total));
 	dlinfo_set_prompt_dyn();
 	printf("\r" "%*s", winsize_column, "");
 
 	if (speed < 1000) {
-		printf("\r%s %s%%  %4ld%s/s  %8s \e[31m[%2d/%-2d]\e[0m",
+		printf("\r%s %s%%  %4ld%s/s  %8s  \e[31m[%d/%d]\e[0m",
 		       prompt, dlinfo_get_percentage(), (long)speed, "KiB",
-		       dlinfo_get_estimate(), threads_curr, threads_total);
+		       dlinfo_get_estimate(), curr, total);
 	} else if (speed > 1000) {
-		printf("\r%s %s%%  %4.3g%s/s  %8s \e[31m[%2d/%-2d]\e[0m",
+		printf("\r%s %s%%  %4.3g%s/s  %8s  \e[31m[%d/%d]\e[0m",
 		       prompt, dlinfo_get_percentage(),
 		       (long)speed / 1000.0, "MiB", dlinfo_get_estimate(),
-		       threads_curr, threads_total);
+		       curr, total);
 	}
 
 	fflush(stdout);
@@ -546,7 +572,6 @@ static void dlinfo_sigalrm_handler(int signo)
 static void dlinfo_sigwinch_handler(int signo)
 {
 	winsize_column = getwcol();
-	scrolling_display_setsize(winsize_column - DLINFO_PROMPT_RESERVED);
 }
 
 static void dlinfo_register_signal_handler(void)
