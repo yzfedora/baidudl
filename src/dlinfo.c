@@ -116,6 +116,10 @@ static char *dlinfo_init(struct dlinfo *dl)
 	char *slash, *ptr;
 	char saved;
 
+	*dl->di_uri = 0;
+	*dl->di_host = 0;
+	*dl->di_serv = 0;
+	strncpy(dl->di_serv, "http", DLINFO_SRV_SZ);
 	if (!(start = strstr(url, "://"))) {
 		start = url;
 	} else {		/* parsing service name */
@@ -146,6 +150,7 @@ static char *dlinfo_init(struct dlinfo *dl)
 	if (slash)
 		*slash = saved;
 
+	err_dbg(1, "Host: %s\nService: %s\nURI: %s\n", dl->di_host, dl->di_serv, dl->di_uri);
 	return ret;
 }
 
@@ -200,19 +205,66 @@ static void dlinfo_send_request(struct dlinfo *dl)
 {
 	char buf[DLINFO_REQ_SZ];
 
+	/* fuck the baidupcs.com, when the url is using https, and we still
+	 * use http to connect, and we connect success, but when I try to
+	 * send http header, I must use single quotes to surround the uri in
+	 * this situation. but after I get correct url(302), we must not use
+	 * the single quotes. maybe I should change the code to use libcurl
+	 * to handle the details.
+	 */
+	if (strcasestr(dl->di_host, "ourdvsss.com")) {
+		sprintf(buf,
+			"GET '%s' HTTP/1.1\r\n"
+			"Host: %s\r\n"
+			"Connection: Keep-Alive\r\n"
+			"\r\n\r\n", dl->di_uri, dl->di_host);
+	} else {
+		sprintf(buf,
+			"GET %s HTTP/1.1\r\n"
+			"Host: %s\r\n"
+			"Connection: Keep-Alive\r\n"
+			"\r\n\r\n", dl->di_uri, dl->di_host);
+	}
+
 	/* not using HEAD request, sometime HEAD will produce 400 error. */
-	sprintf(buf, "GET %s HTTP/1.1\r\n"
-		"Host: %s\r\n\r\n", dl->di_uri, dl->di_host);
 	writen(dl->di_remote, buf, strlen(buf));
 	err_dbg(2, "-------------- Send Requst (Meta info) -----------\n"
 			"%s", buf);
+}
+
+static int dlinfo_url_redirect(struct dlinfo **dl, char *buf)
+{
+	char *url, *newline, *ptr;
+	struct dlinfo *new;
+
+#define HEADER_LOCATION "Location: "
+	if (!(url = strcasestr(buf, HEADER_LOCATION)))
+		return -1;
+
+	if ((newline = strstr(url, "\r\n")))
+		*newline = 0;
+
+	/* strip the host string in the response header. */
+	if ((ptr = strcasestr(url, (*dl)->di_host))) {
+		*ptr = 0;
+		ptr += strlen((*dl)->di_host) + 1;
+		strcat(url, ptr);
+	}
+
+	url += sizeof(HEADER_LOCATION) - 1;
+	if (!(new = dlinfo_new(url, (*dl)->di_filename, (*dl)->di_nthreads)))
+		return -1;
+
+	(*dl)->delete(*dl);
+	*dl = new;
+	return 0;
 }
 
 /*
  * Receive the response from the server, which include the HEAD info. And
  * store result to dl->di_length, dl->di_filename.
  */
-static int dlinfo_recv_and_parsing(struct dlinfo *dl)
+static int dlinfo_recv_and_parsing(struct dlinfo **dl)
 {
 	int n;
 	int code;
@@ -221,7 +273,7 @@ static int dlinfo_recv_and_parsing(struct dlinfo *dl)
 	char *p;
 
 	/* any error or end-of-file will cause parsing header fails */
-	if ((n = read(dl->di_remote, buf, DLINFO_RCV_SZ - 1)) <= 0)
+	if ((n = read((*dl)->di_remote, buf, DLINFO_RCV_SZ - 1)) <= 0)
 		return -1;
 
 	buf[n] = 0;
@@ -230,37 +282,41 @@ static int dlinfo_recv_and_parsing(struct dlinfo *dl)
 
 	/* response code valid range [200-300) */
 	code = getrcode(buf);
-	if (code < 200 || code >= 300)
-		return -1;
+	if (code < 200 || code >= 300) {
+		if (code == 302)
+			return dlinfo_url_redirect(dl, buf);
+		else
+			return -1;
+	}
 
-#define _CONTENT_LENGTH	"Content-Length: "
-	if (NULL != (p = strcasestr(buf, _CONTENT_LENGTH))) {
-		dl->di_length = strtol(p + sizeof(_CONTENT_LENGTH) - 1,
+#define HEADER_CONTENT_LENGTH "Content-Length: "
+	if (NULL != (p = strcasestr(buf, HEADER_CONTENT_LENGTH))) {
+		(*dl)->di_length = strtol(p + sizeof(HEADER_CONTENT_LENGTH) - 1,
 				       NULL, 10);
 	}
 
 	/* User specified filename */
-	if (*dl->di_filename)
+	if (*(*dl)->di_filename)
 		return 0;
 
-#define FILENAME	"filename="
-	if ((p = strcasestr(buf, FILENAME))) {
-		p = memccpy(tmp, p + sizeof(FILENAME) - 1, '\n',
+#define HEADER_FILENAME "filename="
+	if ((p = strcasestr(buf, HEADER_FILENAME))) {
+		p = memccpy(tmp, p + sizeof(HEADER_FILENAME) - 1, '\n',
 				DLINFO_ENCODE_NAME_MAX);
 		if (!p) {
 			err_sys("memccpy");
 			return -1;
 		}
-		strncpy(dl->di_filename, string_decode(tmp),
-			sizeof(dl->di_filename) - 1);
+		strncpy((*dl)->di_filename, string_decode(tmp),
+			sizeof((*dl)->di_filename) - 1);
 		return 0;
 	}
 
 	/* if filename parsing failed, then parsing filename from url. */
-	if ((p = strrchr(dl->di_url, '/'))) {
+	if ((p = strrchr((*dl)->di_url, '/'))) {
 		strcpy(tmp, p + 1);
-		strncpy(dl->di_filename, string_decode(tmp),
-			sizeof(dl->di_filename) - 1);
+		strncpy((*dl)->di_filename, string_decode(tmp),
+			sizeof((*dl)->di_filename) - 1);
 		return 0;
 	}
 	return -1;
@@ -881,7 +937,7 @@ struct dlinfo *dlinfo_new(char *url, char *filename, int nthreads)
 dlinfo_new_again:
 		dl->di_remote = dlinfo_connect(dl);
 		dlinfo_send_request(dl);
-		if (dlinfo_recv_and_parsing(dl) == -1) {
+		if (dlinfo_recv_and_parsing(&dl) == -1) {
 			if (close(dl->di_remote) == -1)
 				err_sys("close remote file descriptor");
 			if (try_times++ < DLINFO_NEW_TRYTIMES_MAX)
