@@ -114,9 +114,11 @@ static int dlinfo_header_parsing(struct dlinfo *dl, char *header_buf)
 	err_dbg(2, "--------------Received Meta info---------------\n"
 						"%s\n", header_buf);
 
-	code = getrcode(header_buf);
-	if (code < 200 || code >= 300) {
-		return -1;
+	if (strncmp(dl->di_url, "ftp://", 6)) {
+		code = getrcode(header_buf);
+		if (code < 200 || code >= 300) {
+			return -1;
+		}
 	}
 
 #define HEADER_CONTENT_LENGTH "Content-Length: "
@@ -557,7 +559,7 @@ static void dlinfo_alarm_launch(void)
  */
 static void *dlinfo_download(void *arg)
 {
-	int btimes = 0;		/* block times */
+	int try_times = 0;
 	int orig_no;
 	ssize_t orig_start, orig_end;
 	struct dlpart **dp = NULL;
@@ -577,7 +579,15 @@ static void *dlinfo_download(void *arg)
 					(long)(*dp)->dp_no,
 					(*dp)->dp_start, (*dp)->dp_end);
 	dl->nthreads_inc(dl);
-	(*dp)->launch(*dp);
+	while ((*dp)->dp_start < (*dp)->dp_end) {
+		if (try_times++ > DI_TRY_TIMES_MAX) {
+			err_msg("thread %d failed to download range: %ld-%ld",
+				(*dp)->dp_no, (*dp)->dp_start, (*dp)->dp_end);
+			break;
+		}
+
+		(*dp)->launch(*dp);
+	}
 	dl->nthreads_dec(dl);
 
 	return NULL;
@@ -682,7 +692,8 @@ launch:
 	 */
 	dlinfo_sigalrm_handler(SIGALRM);
 	dlinfo_sigalrm_detach();
-	dlinfo_records_removing(dl);
+	if (dl->di_total_read == dl->di_total)
+		dlinfo_records_removing(dl);
 	printf("\n");
 	return;
 

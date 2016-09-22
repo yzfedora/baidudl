@@ -25,6 +25,7 @@
 #define DI_ENC_NAME_MAX		(NAME_MAX * 3 + 1)
 #define DI_PROMPT_SZ		1024
 #define DI_PROMPT_RESERVED	45
+#define DI_TRY_TIMES_MAX	7
 
 struct dlthreads {
 	pthread_t		thread;

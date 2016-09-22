@@ -106,12 +106,11 @@ static size_t dlpart_write_callback(char *buf,
 	return dp->dp_nrd;
 }
 
-static int dlpart_curl_setup(struct dlpart *dp, char *errbuf)
+static int dlpart_curl_setup(struct dlpart *dp)
 {
 	char range[DLPART_BUFSZ];
 
 	snprintf(range, sizeof(range), "%ld-%ld", dp->dp_start, dp->dp_end);
-	curl_easy_setopt(dp->dp_curl, CURLOPT_ERRORBUFFER, errbuf);
 	curl_easy_setopt(dp->dp_curl, CURLOPT_RANGE, range);
 	curl_easy_setopt(dp->dp_curl, CURLOPT_URL, dp->dp_info->di_url);
 	curl_easy_setopt(dp->dp_curl, CURLOPT_FOLLOWLOCATION, 1);
@@ -124,13 +123,10 @@ static int dlpart_curl_setup(struct dlpart *dp, char *errbuf)
 static int dlpart_launch(struct dlpart *dp)
 {
 	CURLcode rc;
-	char errbuf[CURL_ERROR_SIZE];
 
-	dlpart_curl_setup(dp, errbuf);
-	if ((rc = curl_easy_perform(dp->dp_curl))) {
-		err_msg("curl_easy_perform: %s", errbuf);
+	dlpart_curl_setup(dp);
+	if ((rc = curl_easy_perform(dp->dp_curl)))
 		return -1;
-	}
 
 	return 0;
 }

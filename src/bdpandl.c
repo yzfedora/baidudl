@@ -108,7 +108,7 @@ int main(int argc, char *argv[])
 		case 'o':
 			filename = optarg;
 			break;
-		case 'l':
+		case 'f':
 			listfile = optarg;
 			break;
 		case 'h':
