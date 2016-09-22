@@ -161,8 +161,8 @@ static int dlinfo_header_parsing_all(struct dlinfo *dl, char *header_buf)
 		if (!dlinfo_header_parsing(dl, sep))
 			return 0;
 
-		sep = strstr(sep, "\r\n\r\n");
-		sep += 4;
+		if ((sep = strstr(sep, "\r\n\r\n")))
+			sep += 4;
 	} while (sep);
 
 }
@@ -385,7 +385,7 @@ static char *dlinfo_prompt_set(struct dlinfo *dl)
 		flags++;
 	}
 
-	snprintf(dl->di_prompt, sizeof(dl->di_prompt), "\e[7m\e");
+	*dl->di_prompt = 0;
 	snprintf(dl->di_file_size_string, sizeof(dl->di_file_size_string),
 		 "%6.1f%-5s",
 		 orig_size / ((double) (1 << (10 * flags))),
@@ -414,7 +414,7 @@ static void dlinfo_prompt_update(struct dlinfo *dl)
 	unsigned int len, padding;
 	char *ptr = dlscrolling_ptr(&len, &padding);
 
-	snprintf(dl->di_prompt + 4, sizeof(dl->di_prompt) - 4, "%.*s  %*s%s", len, ptr,
+	snprintf(dl->di_prompt, sizeof(dl->di_prompt), "%.*s  %*s%s", len, ptr,
 		 padding, "", dl->di_file_size_string);
 	dl->di_sig_cnt++;
 }
@@ -489,11 +489,11 @@ static void dlinfo_sigalrm_handler(int signo)
 
 	speed >>= 10;
 	if (speed < 1000) {
-		printf("\r%s %s%%  %4ld%s/s  %8s  \e[31m[%d]\e[0m",
+		printf("\r\e[48;5;161m\e[30m%s %s%%  %4ld%s/s  %8s  [%d]\e[0m",
 		       dl->di_prompt, dlinfo_get_percentage(dl), (long)speed, "KiB",
 		       dlinfo_get_estimate(dl), curr);
 	} else if (speed > 1000) {
-		printf("\r%s %s%%  %4.3g%s/s  %8s  \e[31m[%d]\e[0m",
+		printf("\r\e[48;5;161m\e[30m%s %s%%  %4.3g%s/s  %8s  [%d]\e[0m",
 		       dl->di_prompt, dlinfo_get_percentage(dl),
 		       (long)speed / 1000.0, "MiB", dlinfo_get_estimate(dl),
 		       curr);
