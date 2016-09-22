@@ -11,7 +11,7 @@ OSX, Windows, 支持断点续传.
 或目录用ZIP格式压缩, 但是他们的服务器把内部的json格式的错误发送了过来(在数据
 传输的过程中发送过来的), 难道不是应该他们内部服务器出错了的时候把tcp连接关闭?
 然后客户端再重试下载? 这样才能保证接受到的数据一定是正确的. 你发个json格式的
-错误过来算什么回事? 还是在数据流中, like this ...... error ......
+错误过来算什么回事? 还是在数据流中 - -!
 
 
 ![image](https://github.com/yzfedora/baidudl/raw/master/demo.png)
@@ -54,7 +54,7 @@ OSX, Windows, 支持断点续传.
 	parsing extra symbols.
 
 	if you want to download many files, you can store these urls to a file,
-	then using -l option:
+	then using -f option:
 	$ bdpandl -n 10 -f listfile
 
 # Notice
