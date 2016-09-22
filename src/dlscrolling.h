@@ -13,13 +13,13 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  *************************************************************************/
-#ifndef _SCROLLING_DISPLAY_H
-#define _SCROLLING_DISPLAY_H
+#ifndef _DLSCROLLING_H
+#define _DLSCROLLING_H
 
 #define likely(x)	__builtin_expect((x), 1)
 #define unlikely(x)	__builtin_expect((x), 0)
 
-int scrolling_display_init(char *s, unsigned int length);
-unsigned int scrolling_display_setsize(unsigned int winsz);
-char *scrolling_display_ptr(unsigned int *len, unsigned int *padding);
+int dlscrolling_init(char *s, unsigned int length);
+unsigned int dlscrolling_setsize(unsigned int winsz);
+char *dlscrolling_ptr(unsigned int *len, unsigned int *padding);
 #endif

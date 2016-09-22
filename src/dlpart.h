@@ -16,23 +16,21 @@
 #ifndef _DLPART_H
 #define _DLPART_H
 #include <sys/types.h>
+#include <curl/curl.h>
 #include "dlinfo.h"
 
 #define DLPART_BUFSZ	(1024 * 1024)
 
 struct dlpart {
+	CURL	*dp_curl;
 	int	dp_no;
-	int	dp_remote;	/* remote server file descriptor */
 	ssize_t	dp_start;
 	ssize_t	dp_end;
-	char	dp_buf[DLPART_BUFSZ];
+	char	*dp_buf;
 	int	dp_nrd;
 	struct dlinfo *dp_info;
 
-	void (*sendhdr)(struct dlpart *);
-	int  (*recvhdr)(struct dlpart *);
-	void (*read)(struct dlpart *);
-	void (*write)(struct dlpart *, ssize_t *, ssize_t *);
+	int (*launch)(struct dlpart *);
 	void (*delete)(struct dlpart *);
 };
 

@@ -73,7 +73,7 @@ ssize_t writen(int fd, const void *buf, size_t count)
  */
 char *string_decode(char *src)
 {
-	char tmp[DLINFO_ENCODE_NAME_MAX];
+	char tmp[DI_ENC_NAME_MAX];
 	char *s = src;
 	int i, j, k, t;
 

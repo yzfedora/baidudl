@@ -100,8 +100,8 @@ CONFIG_CLEAN_VPATH_FILES =
 am__installdirs = "$(DESTDIR)$(bindir)"
 PROGRAMS = $(bin_PROGRAMS)
 am_bdpandl_OBJECTS = bdpandl.$(OBJEXT) dlcommon.$(OBJEXT) \
-	dlinfo.$(OBJEXT) dlpart.$(OBJEXT) scrolling_display.$(OBJEXT) \
-	err_handler.$(OBJEXT)
+	dlinfo.$(OBJEXT) dlpart.$(OBJEXT) dlscrolling.$(OBJEXT) \
+	dllist.$(OBJEXT) err_handler.$(OBJEXT)
 bdpandl_OBJECTS = $(am_bdpandl_OBJECTS)
 bdpandl_LDADD = $(LDADD)
 bdpandl_LINK = $(CCLD) $(AM_CFLAGS) $(CFLAGS) $(bdpandl_LDFLAGS) \
@@ -256,8 +256,8 @@ top_build_prefix = @top_build_prefix@
 top_builddir = @top_builddir@
 top_srcdir = @top_srcdir@
 bdpandl_SOURCES = bdpandl.c dlcommon.c dlcommon.h dlinfo.c dlinfo.h dlpart.c \
-				  dlpart.h scrolling_display.c scrolling_display.h \
-				  err_handler.c err_handler.h
+		  dlpart.h dlscrolling.c dlscrolling.h \
+		  dllist.c dllist.h err_handler.c err_handler.h
 
 bdpandl_LDFLAGS = -Wall -Wextra -lpthread
 bdpandl_decode_SOURCES = bdpandl-decode.c err_handler.c err_handler.h
@@ -356,9 +356,10 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/bdpandl.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/dlcommon.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/dlinfo.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/dllist.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/dlpart.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/dlscrolling.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/err_handler.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/scrolling_display.Po@am__quote@
 
 .c.o:
 @am__fastdepCC_TRUE@	$(AM_V_CC)$(COMPILE) -MT $@ -MD -MP -MF $(DEPDIR)/$*.Tpo -c -o $@ $<

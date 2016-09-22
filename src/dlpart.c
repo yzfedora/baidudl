@@ -34,13 +34,11 @@
 #include "dlpart.h"
 #include "dlcommon.h"
 
-#define DLPART_NEW_TIMES	120
-static pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
 
 /*
- * Suppoort continuous download:
- * | file | nthreads | 1th-thread range | 2th-thread range |...
- * |length|  4bytes  |    8bytes x 2    |   8bytes x 2     |...
+ * Continuous download supports:
+ * | total_length | nthreads | range 1 | ... | range n |
+ * | 8 bytes      | 4 bytes  | 8 x 2   |     | 8 x 2   |
  */
 static void dlpart_update(struct dlpart *dp)
 {
@@ -52,108 +50,26 @@ static void dlpart_update(struct dlpart *dp)
 	ssize_t offset = dl->di_length + sizeof(dl->di_nthreads) +
 			sizeof(start) * dp->dp_no * 2;
 
-try_pwrite_range_start:
+try_write_start_again:
 	ret = pwrite(local, &start, sizeof(start), offset);
 	if (ret != sizeof(start))
-		goto try_pwrite_range_start;
+		goto try_write_start_again;
 
-try_pwrite_range_end:
+try_write_end_again:
 	ret = pwrite(local, &end, sizeof(end), offset + sizeof(start));
 	if (ret != sizeof(end))
-		goto try_pwrite_range_end;
-}
-
-
-/* 
- * HTTP Header format:
- * 	GET url HTTP/1.1\r\n
- * 	Range: bytes=x-y\r\n
- */
-static void dlpart_send_header(struct dlpart *dp)
-{
-	char sbuf[DLPART_BUFSZ];
-	struct dlinfo *dl = dp->dp_info;
-
-	sprintf(sbuf, "GET %s HTTP/1.1\r\n"
-		      "Host: %s\r\n"
-		      "Range: bytes=%ld-%ld\r\n\r\n",
-		      dp->dp_info->di_uri, dp->dp_info->di_host,
-		      (long)dp->dp_start, (long)dp->dp_end);
-
-	err_dbg(2, "\n---------------Sending Header(%ld-%ld)----------------\n"
-		"%s", dp->dp_start, dp->dp_end, sbuf);
-	writen(dp->dp_remote, sbuf, strlen(sbuf));
-}
-
-static int dlpart_recv_header(struct dlpart *dp)
-{
-	int is_header = 1;
-	ssize_t start, end;
-	char *sp, *p, *ep;
-
-	while (is_header) {
-		dp->read(dp);
-		if (dp->dp_nrd <= 0)
-			goto out;
-
-		if ((sp = strstr(dp->dp_buf, "\r\n\r\n"))) {
-			*sp = 0;
-			sp += 4;
-			dp->dp_nrd -= (sp - dp->dp_buf);
-			is_header = 0;
-		}
-
-		err_dbg(2, "\n----------Receiving Heading(%ld-%ld)----------\n"
-			"%s", dp->dp_start, dp->dp_end, dp->dp_buf);
-
-		/* multi-thread download, the response code should be 206. */
-		if (getrcode(dp->dp_buf) != 206)
-			goto out;
-
-#define RANGE	"Content-Range: bytes "
-		if ((p = strstr(dp->dp_buf, RANGE))) {
-			start = strtol(p + sizeof(RANGE) - 1, &ep, 10);
-			if  (ep && *ep == '-')
-				end = strtol(ep + 1, NULL, 10);
-
-			if (start != dp->dp_start || end != dp->dp_end) {
-				err_msg("need download from %ld to %ld, but "
-					"return %ld-%ld\n",
-					 dp->dp_start, dp->dp_end, start, end);
-				goto out;
-			}
-		}
-	}
-
-	/* 
-	 * FUCKING THE IMPLEMENTATION OF STRNCPY! try using memmove() instead.
-	 * strncpy(dp->dp_buf, sp, dp->dp_nrd);
-	 */
-	memmove(dp->dp_buf, sp, dp->dp_nrd);
-	return 0;
-out:
-	dp->dp_nrd = 0;
-	return -1;
-}
-
-static void dlpart_read(struct dlpart *dp)
-{
-	/* 
-	 * If any errors occured, -1 will returned, and errno will be
-	 * set correctly
-	 */
-	dp->dp_nrd = read(dp->dp_remote, dp->dp_buf, DLPART_BUFSZ);
+		goto try_write_end_again;
 }
 
 /*
  * Write 'dp->dp_nrd' data which pointed by 'dp->dp_buf' to local file.
  * And the offset 'dp->dp_start' will be updated also.
  */
-static void dlpart_write(struct dlpart *dp, ssize_t *total_read,
-			 ssize_t *bytes_per_sec)
+static void dlpart_write(struct dlpart *dp)
 {
 	int s, n, len = dp->dp_nrd;
 	char *buf = dp->dp_buf;
+	struct dlinfo *dl = dp->dp_info;
 
 	while (len > 0) {
 		n = pwrite(dp->dp_info->di_local, buf, len, dp->dp_start);
@@ -170,36 +86,63 @@ static void dlpart_write(struct dlpart *dp, ssize_t *total_read,
 		}
 	}
 
-	/*
-	 * only lock the dp->read call is necessary, since it may
-	 * update the global varibale total_read and bytes_per_sec.
-	 */
-	if ((s = pthread_mutex_lock(&mutex)) != 0) {
-		errno = s;
-		err_sys("pthread_mutex_lock");
-	}
-
-	/* 
-	 * Since we updated the 'total_read' and 'bytes_per_sec', calling
-	 * this dlpart_read need to be protected by pthead_mutex
-	 */
-	if (total_read)
-		*total_read += dp->dp_nrd;
-	if (bytes_per_sec)
-		*bytes_per_sec += dp->dp_nrd;
-	
-	if ((s = pthread_mutex_unlock(&mutex)) != 0) {
-		errno = s;
-		err_sys("pthread_mutex_unlock");
-	}
+	dl->total_read_update(dl, dp->dp_nrd);
+	dl->bps_update(dl, dp->dp_nrd);
 
 	dlpart_update(dp);
 }
 
+static size_t dlpart_write_callback(char *buf,
+				    size_t size,
+				    size_t nitems,
+				    void *userdata)
+{
+	struct dlpart *dp = (struct dlpart *)userdata;
+
+	dp->dp_nrd = size * nitems;
+	dp->dp_buf = buf;
+
+	dlpart_write(dp);
+	return dp->dp_nrd;
+}
+
+static int dlpart_curl_setup(struct dlpart *dp, char *errbuf)
+{
+	char range[DLPART_BUFSZ];
+
+	snprintf(range, sizeof(range), "%ld-%ld", dp->dp_start, dp->dp_end);
+	curl_easy_setopt(dp->dp_curl, CURLOPT_ERRORBUFFER, errbuf);
+	curl_easy_setopt(dp->dp_curl, CURLOPT_RANGE, range);
+	curl_easy_setopt(dp->dp_curl, CURLOPT_URL, dp->dp_info->di_url);
+	curl_easy_setopt(dp->dp_curl, CURLOPT_FOLLOWLOCATION, 1);
+	curl_easy_setopt(dp->dp_curl, CURLOPT_WRITEFUNCTION,
+			 dlpart_write_callback);
+	curl_easy_setopt(dp->dp_curl, CURLOPT_WRITEDATA, dp);
+	return 0;
+}
+
+static int dlpart_launch(struct dlpart *dp)
+{
+	CURLcode rc;
+	char errbuf[CURL_ERROR_SIZE];
+
+	dlpart_curl_setup(dp, errbuf);
+	if ((rc = curl_easy_perform(dp->dp_curl))) {
+		err_msg("curl_easy_perform: %s", errbuf);
+		return -1;
+	}
+
+	return 0;
+}
+
 static void dlpart_delete(struct dlpart *dp)
 {
-	if (close(dp->dp_remote) == -1)
-		err_sys("close %d", dp->dp_remote);
+	if (!dp)
+		return;
+
+	if (dp->dp_curl)
+		curl_easy_cleanup(dp->dp_curl);
+
 	free(dp);
 }
 
@@ -212,42 +155,21 @@ struct dlpart *dlpart_new(struct dlinfo *dl, ssize_t start, ssize_t end, int no)
 		return NULL;
 
 	memset(dp, 0, sizeof(*dp));
+	if (!(dp->dp_curl = curl_easy_init())) {
+		err_msg("curl_easy_init");
+		dlpart_delete(dp);
+		return NULL;
+	}
+
 	dp->dp_no = no;
-	dp->dp_remote = dl->connect(dl);
 	dp->dp_info = dl;
 
-	dp->sendhdr = dlpart_send_header;
-	dp->recvhdr = dlpart_recv_header;
-	dp->read = dlpart_read;
-	dp->write = dlpart_write;
+	dp->launch = dlpart_launch;
 	dp->delete = dlpart_delete;
 
 	dp->dp_start = start;
 	dp->dp_end = end;
 	dlpart_update(dp);	/* Force to write the record into end of file*/
-try_sendhdr_again:
-	dp->sendhdr(dp);
-	if (dp->recvhdr(dp) == -1) {
-		if (try_times++ >= DLPART_NEW_TIMES)
-			return NULL;
-
-		if (close(dp->dp_remote) == -1)
-			err_sys("close");
-
-		dp->dp_remote = dl->connect(dl);
-		goto try_sendhdr_again;
-	}
-
-	/*
-	 * for to get maximun of concurrency, set dp->dp_remote to nonblock.
-	 */
-	int flags;
-	if ((flags = fcntl(dp->dp_remote, F_GETFL, 0)) == -1)
-		err_exit("fcntl-getfl");
-
-	flags |= O_NONBLOCK;
-	if (fcntl(dp->dp_remote, F_SETFL, flags) == -1)
-		err_exit("fcntl-setfl");
 
 	return dp;
 }

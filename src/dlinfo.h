@@ -13,21 +13,18 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  *************************************************************************/
-#ifndef _DLINFO_H
-#define _DLINFO_H
+#ifndef _DI_H
+#define _DI_H
 #include <sys/types.h>
 #include <limits.h>
 #include "dlpart.h"
 
-#define DLINFO_BUF_SZ	1024
-#define DLINFO_REQ_SZ	4096
-#define DLINFO_RCV_SZ	(1024 * 128)
-#define DLINFO_SRV_SZ	64
-#define DLINFO_HST_SZ	512
-#define DLINFO_URL_SZ	4096
-#define DLINFO_URI_SZ	4096
-#define DLINFO_NAME_MAX	(NAME_MAX + 1)
-#define DLINFO_ENCODE_NAME_MAX	(NAME_MAX * 3 + 1)
+#define DI_BUF_SZ		1024
+#define DI_URL_SZ		4096
+#define DI_NAME_MAX		(NAME_MAX + 1)
+#define DI_ENC_NAME_MAX		(NAME_MAX * 3 + 1)
+#define DI_PROMPT_SZ		1024
+#define DI_PROMPT_RESERVED	45
 
 struct dlthreads {
 	pthread_t		thread;
@@ -36,28 +33,44 @@ struct dlthreads {
 };
 
 /* Used to packet following parameters into a structure. */
-struct packet_args {
+struct args {
 	struct dlinfo	*arg_dl;
-	struct dlpart	**arg_dp;/* saved address of dp, used in download(). */
+	struct dlpart	**arg_dp;
 	ssize_t		arg_start;
 	ssize_t		arg_end;
 	int		arg_no;
 };
 
 struct dlinfo {
-	int	di_remote;
-	int	di_local;
-	int	di_nthreads;	/* number of threads to download */
-	ssize_t	di_length;	/* total length of the file */
+	char	di_url[DI_URL_SZ];	/* original download url request */
+	char	di_filename[DI_NAME_MAX];
+	ssize_t	di_length;		/* total length of the file */
+	int	di_local;		/* local file descriptor */
 
-	char	di_filename[DLINFO_NAME_MAX];
-	char	di_serv[DLINFO_SRV_SZ];	/* service type */
-	char	di_host[DLINFO_HST_SZ];	/* host name or IP address */
-	char	di_url[DLINFO_URL_SZ];	/* original download url request */
-	char	di_uri[DLINFO_URI_SZ];
+	int	di_nthreads;		/* number of threads to download */
+	int	di_nthreads_curr;	/* current running threads */
+	int	di_nthreads_total;
+
+	char	di_prompt[DI_PROMPT_SZ];/* store the prompt string */
+	char	di_file_size_string[16];/* file size in a string format */
+	int	di_wincsz;		/* terminal widows columns */
+	size_t	di_sig_cnt;		/* sigalrm counter */
+	size_t	di_total;		/* length of file */
+	size_t	di_total_read;		/* total read(received) bytes */
+	size_t	di_bps;			/* bytes per second, speed */
+
+	int	di_recovery:1;		/* recovery from previous file */
+	int	di_try_ignore_records:1;/* prevent restore from invalid file */
+
+	pthread_mutex_t	di_mutex;
 
 	struct dlthreads *di_threads;
-	
+
+	void (*nthreads_inc)(struct dlinfo *);
+	void (*nthreads_dec)(struct dlinfo *);
+	void (*total_read_update)(struct dlinfo *, size_t);
+	void (*bps_update)(struct dlinfo *, size_t);
+	void (*bps_reset)(struct dlinfo *);
 	int (*connect)(struct dlinfo *);/* used by dlpart_new */
 	void (*setprompt)(struct dlinfo *);
 	void (*rgstralrm)(void);
