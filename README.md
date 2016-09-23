@@ -39,7 +39,7 @@ OSX, Windows, 支持断点续传.
 # Install
 	$ git clone https://github.com/yzfedora/baidudl.git
 	$ cd baidudl
-	$ ./configure
+	$ ./autogen.sh
 	$ make
 	$ sudo make install
 
