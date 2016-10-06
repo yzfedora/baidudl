@@ -729,6 +729,7 @@ void dlinfo_delete(struct dlinfo *dl)
 		dt = dt->next;
 	}
 	free(dl);
+	curl_global_cleanup();
 }
 
 static void dlinfo_nthreads_running_inc(struct dlinfo *dl)
@@ -775,6 +776,7 @@ struct dlinfo *dlinfo_new(char *url, char *filename, int nthreads)
 		return NULL;
 
 	pthread_mutex_init(&dl->di_mutex, NULL);
+	curl_global_init(CURL_GLOBAL_ALL);
 
 	memset(dl, 0, sizeof(*dl));
 	strcpy(dl->di_url, url);
