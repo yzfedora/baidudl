@@ -174,7 +174,6 @@ static int dlinfo_init(struct dlinfo *dl)
 	int ret = -1;
 	CURL *curl;
 	CURLcode rc;
-	char errbuf[CURL_ERROR_SIZE];
 	char *header_buf = NULL;
 	size_t header_len = 0;
 	FILE *header_ptr = open_memstream(&header_buf, &header_len);
@@ -190,14 +189,15 @@ static int dlinfo_init(struct dlinfo *dl)
 		goto out;
 	}
 
-	curl_easy_setopt(curl, CURLOPT_ERRORBUFFER, errbuf);
 	curl_easy_setopt(curl, CURLOPT_URL, dl->di_url);
 	curl_easy_setopt(curl, CURLOPT_NOBODY, 1);
+	curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 0);
+	curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 0);
 	curl_easy_setopt(curl, CURLOPT_HEADERDATA, header_ptr);
 	curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1);
 
 	if ((rc = curl_easy_perform(curl))) {
-		err_msg("curl_easy_perform: %s", errbuf);
+		err_msg("curl_easy_perform: %s", curl_easy_strerror(rc));
 		goto out;;
 	}
 

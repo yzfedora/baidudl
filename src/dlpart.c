@@ -117,6 +117,8 @@ static int dlpart_curl_setup(struct dlpart *dp)
 	curl_easy_setopt(dp->dp_curl, CURLOPT_WRITEFUNCTION,
 			 dlpart_write_callback);
 	curl_easy_setopt(dp->dp_curl, CURLOPT_WRITEDATA, dp);
+	curl_easy_setopt(dp->dp_curl, CURLOPT_SSL_VERIFYHOST, 0);
+	curl_easy_setopt(dp->dp_curl, CURLOPT_SSL_VERIFYPEER, 0);
 	return 0;
 }
 
@@ -125,8 +127,10 @@ static int dlpart_launch(struct dlpart *dp)
 	CURLcode rc;
 
 	dlpart_curl_setup(dp);
-	if ((rc = curl_easy_perform(dp->dp_curl)))
+	if ((rc = curl_easy_perform(dp->dp_curl))) {
+		err_msg("curl_easy_perform: %s", curl_easy_strerror(rc));
 		return -1;
+	}
 
 	return 0;
 }
