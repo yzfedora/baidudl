@@ -7,11 +7,10 @@ our program can't resolve the correct download url. and I just fix it today :-)
 百度网盘多线程下载工具, 支持协议http, https, ftp, 支持平台Linux, Unix-Like,
 OSX, Windows, 支持断点续传.
 
-我还是在想百度有没有把批量下载的BUG给修复了没? 因为批量下载的时候会把多个文件
-或目录用ZIP格式压缩, 但是他们的服务器把内部的json格式的错误发送了过来(在数据
-传输的过程中发送过来的), 难道不是应该他们内部服务器出错了的时候把tcp连接关闭?
-然后客户端再重试下载? 这样才能保证接受到的数据一定是正确的. 你发个json格式的
-错误过来算什么回事? 还是在数据流中 - -!
+最近baidu在更新内部服务器吧,不是到是不是他们知道了打包（批量）下载里面的bug,之前你是可以
+用HEAD+Multithreading下载的,但现在对于打包下载的url是不支持HTTP HEAD了，会返回HTTP
+405 Not Allowed错误. 也就是说打包下载不支持多线程下载了.要是能用多线程打包下载就好了,
+就不用一个一个点下载按钮然后再Copy-Paste了.
 
 
 ![image](https://github.com/yzfedora/baidudl/raw/master/demo.png)
