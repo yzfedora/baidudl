@@ -7,12 +7,14 @@ our program can't resolve the correct download url. and I just fix it today :-)
 百度网盘多线程下载工具, 支持协议http, https, ftp, 支持平台Linux, Unix-Like,
 OSX, Windows, 支持断点续传.
 
-最近baidu在更新内部服务器吧,不是到是不是他们知道了打包（批量）下载里面的bug,之前你是可以
-用HEAD+Multithreading下载的,但现在对于打包下载的url是不支持HTTP HEAD了，会返回HTTP
-405 Not Allowed错误. 也就是说打包下载不支持多线程下载了.要是能用多线程打包下载就好了,
-就不用一个一个点下载按钮然后再Copy-Paste了.
-
-
+Notice:
+    pan.baidu.com has no longer supports the HTTP HEAD request for batch
+    download url, that's meaning we can't use multithreadding for this
+    kind of url, I guess this is because the batch download has some bugs
+    in their servers, because I have found some bug indeed. so they return
+    a HTTP 405 Not Allowed error to prevent some tools use multithreadding
+    to download it, I think this is reasonable, but the best way is to fix
+    this bug.
 ![image](https://github.com/yzfedora/baidudl/raw/master/demo.png)
 
 # next steps
