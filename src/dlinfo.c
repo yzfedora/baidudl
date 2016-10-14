@@ -171,13 +171,13 @@ static int dlinfo_header_parsing_all(struct dlinfo *dl, char *header_buf)
 }
 
 static size_t dlinfo_curl_write_callback(char *ptr,
-                                         size_t size,
-                                         size_t nmemb,
-                                         void *userdata)
+					 size_t size,
+					 size_t nmemb,
+					 void *userdata)
 {
 	size_t ret = size * nmemb;
 	FILE *header_ptr = (FILE *)userdata;
-	char *end = strstr(ptr, "\r\n\r\n");
+	char *end = strstr(ptr, "\n\n");
 
 	if (end) {
 		*end = 0;
