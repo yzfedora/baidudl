@@ -167,19 +167,37 @@ static int dlinfo_header_parsing_all(struct dlinfo *dl, char *header_buf)
 			sep += 4;
 	} while (sep);
 
+	return -1;
 }
 
-static int dlinfo_init(struct dlinfo *dl)
+static size_t dlinfo_curl_write_callback(char *ptr,
+                                         size_t size,
+                                         size_t nmemb,
+                                         void *userdata)
+{
+	size_t ret = size * nmemb;
+	FILE *header_ptr = (FILE *)userdata;
+	char *end = strstr(ptr, "\r\n\r\n");
+
+	if (end) {
+		*end = 0;
+		ret = 0;
+	}
+
+	fwrite(ptr, size, nmemb, header_ptr);
+	return ret;
+}
+
+static int dlinfo_init_without_head(struct dlinfo *dl)
 {
 	int ret = -1;
 	CURL *curl;
 	CURLcode rc;
 	char *header_buf = NULL;
 	size_t header_len = 0;
-	FILE *header_ptr = open_memstream(&header_buf, &header_len);
+	FILE *header_ptr;
 
-
-	if (!header_ptr) {
+	if (!(header_ptr = open_memstream(&header_buf, &header_len))) {
 		err_sys("open_memstream");
 		goto out;
 	}
@@ -190,11 +208,60 @@ static int dlinfo_init(struct dlinfo *dl)
 	}
 
 	curl_easy_setopt(curl, CURLOPT_URL, dl->di_url);
-	curl_easy_setopt(curl, CURLOPT_NOBODY, 1);
-	curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 0);
-	curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 0);
+	curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 0L);
+	curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 0L);
+	curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
+	curl_easy_setopt(curl, CURLOPT_HEADER, 1L);
+	curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION,
+			 dlinfo_curl_write_callback);
+	curl_easy_setopt(curl, CURLOPT_WRITEDATA, header_ptr);
+
+	if ((rc = curl_easy_perform(curl)) && rc != CURLE_WRITE_ERROR) {
+		err_msg("curl_easy_perform: %s", curl_easy_strerror(rc));
+		goto out;;
+	}
+
+	fflush(header_ptr);
+	if (dlinfo_header_parsing_all(dl, header_buf))
+		goto out;
+
+	err_dbg(1, "filename=%s, length=%ld\n", dl->di_filename, dl->di_length);
+	ret = 0;
+out:
+	if (header_ptr)
+		fclose(header_ptr);
+	if (header_buf)
+		free(header_buf);
+	if (curl)
+		curl_easy_cleanup(curl);
+	return ret;
+}
+
+static int dlinfo_init(struct dlinfo *dl)
+{
+	int ret = -1;
+	CURL *curl;
+	CURLcode rc;
+	char *header_buf = NULL;
+	size_t header_len = 0;
+	FILE *header_ptr;
+
+	if (!(header_ptr = open_memstream(&header_buf, &header_len))) {
+		err_sys("open_memstream");
+		goto out;
+	}
+
+	if (!(curl = curl_easy_init())) {
+		err_msg("curl_easy_init");
+		goto out;
+	}
+
+	curl_easy_setopt(curl, CURLOPT_URL, dl->di_url);
+	curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 0L);
+	curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 0L);
+	curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
+	curl_easy_setopt(curl, CURLOPT_NOBODY, 1L);
 	curl_easy_setopt(curl, CURLOPT_HEADERDATA, header_ptr);
-	curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1);
 
 	if ((rc = curl_easy_perform(curl))) {
 		err_msg("curl_easy_perform: %s", curl_easy_strerror(rc));
@@ -212,6 +279,8 @@ out:
 		fclose(header_ptr);
 	if (header_buf)
 		free(header_buf);
+	if (curl)
+		curl_easy_cleanup(curl);
 	return ret;
 }
 
@@ -298,7 +367,7 @@ static ssize_t dlinfo_records_recovery_all(struct dlinfo *dl)
 			 */
 			if (start != end + 1)
 				err_exit("recovery error range: %ld-%ld\n",
-					    start, end);
+					 start, end);
 			/* 
 			 * Set members of *dt to 0 or NULL. subtract 1 for
 			 * finished part.
@@ -587,6 +656,16 @@ static void *dlinfo_download(void *arg)
 		}
 
 		(*dp)->launch(*dp);
+		orig_start = (*dp)->dp_start;
+		orig_end = (*dp)->dp_end;
+		(*dp)->delete(*dp);
+
+		if (!(*dp = dlpart_new(dl, orig_start, orig_end, orig_no))) {
+			err_msg("error, try download range: %ld - %ld again",
+				orig_start, orig_end);
+			return NULL;
+		}
+		sleep(1);
 	}
 	dl->nthreads_dec(dl);
 
@@ -798,7 +877,7 @@ struct dlinfo *dlinfo_new(char *url, char *filename, int nthreads)
 	 * and establish a temporary connection used to send HTTP HEAD
 	 * request, that we can retriving the length and filename.
 	 */
-	if (dlinfo_init(dl)) {
+	if (dlinfo_init(dl) && dlinfo_init_without_head(dl)) {
 		dl->delete(dl);
 		return NULL;
 	}
