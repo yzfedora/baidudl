@@ -177,12 +177,9 @@ static size_t dlinfo_curl_write_callback(char *ptr,
 {
 	size_t ret = size * nmemb;
 	FILE *header_ptr = (FILE *)userdata;
-	char *end = strstr(ptr, "\n\n");
 
-	if (end) {
-		*end = 0;
+    if (!strcmp(ptr, "\r\n"))
 		ret = 0;
-	}
 
 	fwrite(ptr, size, nmemb, header_ptr);
 	return ret;
