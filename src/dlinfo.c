@@ -39,6 +39,7 @@
 #include "dlcommon.h"
 #include "dllist.h"
 #include "dlscrolling.h"
+#include "dlbuffer.h"
 
 
 #define PACKET_ARGS(pkt, dl, dp, start, end, no) 	\
@@ -122,7 +123,7 @@ static int dlinfo_header_parsing(struct dlinfo *dl, char *header_buf)
 	}
 
 #define HEADER_CONTENT_LENGTH "Content-Length: "
-	if ((p = strcasestr(header_buf, HEADER_CONTENT_LENGTH))) {
+	if ((p = dlstrcasestr(header_buf, HEADER_CONTENT_LENGTH))) {
 		dl->di_length = strtol(p + sizeof(HEADER_CONTENT_LENGTH) - 1,
 				       NULL, 10);
 	}
@@ -132,7 +133,7 @@ static int dlinfo_header_parsing(struct dlinfo *dl, char *header_buf)
 		return 0;
 
 #define HEADER_FILENAME "filename="
-	if ((p = strcasestr(header_buf, HEADER_FILENAME))) {
+	if ((p = dlstrcasestr(header_buf, HEADER_FILENAME))) {
 		p = memccpy(tmp, p + sizeof(HEADER_FILENAME) - 1, '\n',
 				DI_ENC_NAME_MAX);
 		if (!p) {
@@ -159,6 +160,9 @@ static int dlinfo_header_parsing_all(struct dlinfo *dl, char *header_buf)
 {
 	char *sep = header_buf;
 
+	if (!header_buf)
+		return -1;
+
 	do {
 		if (!dlinfo_header_parsing(dl, sep))
 			return 0;
@@ -170,19 +174,25 @@ static int dlinfo_header_parsing_all(struct dlinfo *dl, char *header_buf)
 	return -1;
 }
 
-static size_t dlinfo_curl_write_callback(char *ptr,
-					 size_t size,
-					 size_t nmemb,
-					 void *userdata)
+static size_t dlinfo_curl_header_callback(char *buf,
+					  size_t size,
+					  size_t nmemb,
+					  void *userdata)
 {
-	size_t ret = size * nmemb;
-	FILE *header_ptr = (FILE *)userdata;
+	size_t len = size * nmemb;
+	struct dlbuffer *db = (struct dlbuffer *)userdata;
 
-    if (!strcmp(ptr, "\r\n"))
-		ret = 0;
+	if (dlbuffer_write(db, buf, len) < 0)
+		return 0;
 
-	fwrite(ptr, size, nmemb, header_ptr);
-	return ret;
+	/*
+	 * force to terminate libcurl to call this write function, because
+	 * we have get entire header.
+	 */
+	if (!strcmp(buf, "\r\n"))
+		return 0;
+
+	return len;
 }
 
 static int dlinfo_init_without_head(struct dlinfo *dl)
@@ -190,12 +200,10 @@ static int dlinfo_init_without_head(struct dlinfo *dl)
 	int ret = -1;
 	CURL *curl;
 	CURLcode rc;
-	char *header_buf = NULL;
-	size_t header_len = 0;
-	FILE *header_ptr;
+	struct dlbuffer *db;
 
-	if (!(header_ptr = open_memstream(&header_buf, &header_len))) {
-		err_sys("open_memstream");
+	if (!(db = dlbuffer_new())) {
+		err_sys("dlbuffer_new");
 		goto out;
 	}
 
@@ -210,25 +218,22 @@ static int dlinfo_init_without_head(struct dlinfo *dl)
 	curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
 	curl_easy_setopt(curl, CURLOPT_HEADER, 1L);
 	curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION,
-			 dlinfo_curl_write_callback);
-	curl_easy_setopt(curl, CURLOPT_WRITEDATA, header_ptr);
+			 dlinfo_curl_header_callback);
+	curl_easy_setopt(curl, CURLOPT_WRITEDATA, db);
 
 	if ((rc = curl_easy_perform(curl)) && rc != CURLE_WRITE_ERROR) {
 		err_msg("curl_easy_perform: %s", curl_easy_strerror(rc));
 		goto out;;
 	}
 
-	fflush(header_ptr);
-	if (dlinfo_header_parsing_all(dl, header_buf))
+	if (dlinfo_header_parsing_all(dl, db->buf))
 		goto out;
 
 	err_dbg(1, "filename=%s, length=%ld\n", dl->di_filename, dl->di_length);
 	ret = 0;
 out:
-	if (header_ptr)
-		fclose(header_ptr);
-	if (header_buf)
-		free(header_buf);
+	if (db)
+		dlbuffer_free(db);
 	if (curl)
 		curl_easy_cleanup(curl);
 	return ret;
@@ -239,12 +244,10 @@ static int dlinfo_init(struct dlinfo *dl)
 	int ret = -1;
 	CURL *curl;
 	CURLcode rc;
-	char *header_buf = NULL;
-	size_t header_len = 0;
-	FILE *header_ptr;
+	struct dlbuffer *db;
 
-	if (!(header_ptr = open_memstream(&header_buf, &header_len))) {
-		err_sys("open_memstream");
+	if (!(db = dlbuffer_new())) {
+		err_sys("dlbuffer_new");
 		goto out;
 	}
 
@@ -258,24 +261,23 @@ static int dlinfo_init(struct dlinfo *dl)
 	curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 0L);
 	curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
 	curl_easy_setopt(curl, CURLOPT_NOBODY, 1L);
-	curl_easy_setopt(curl, CURLOPT_HEADERDATA, header_ptr);
+	curl_easy_setopt(curl, CURLOPT_HEADERFUNCTION,
+			 dlinfo_curl_header_callback);
+	curl_easy_setopt(curl, CURLOPT_HEADERDATA, db);
 
-	if ((rc = curl_easy_perform(curl))) {
+	if ((rc = curl_easy_perform(curl)) && rc != CURLE_WRITE_ERROR) {
 		err_msg("curl_easy_perform: %s", curl_easy_strerror(rc));
 		goto out;;
 	}
 
-	fflush(header_ptr);
-	if (dlinfo_header_parsing_all(dl, header_buf))
+	if (dlinfo_header_parsing_all(dl, db->buf))
 		goto out;
 
 	err_dbg(1, "filename=%s, length=%ld\n", dl->di_filename, dl->di_length);
 	ret = 0;
 out:
-	if (header_ptr)
-		fclose(header_ptr);
-	if (header_buf)
-		free(header_buf);
+	if (db)
+		dlbuffer_free(db);
 	if (curl)
 		curl_easy_cleanup(curl);
 	return ret;
@@ -627,7 +629,7 @@ static void *dlinfo_download(void *arg)
 {
 	int try_times = 0;
 	int orig_no;
-	ssize_t orig_start, orig_end;
+	size_t orig_start, orig_end;
 	struct dlpart **dp = NULL;
 	struct dlinfo *dl = NULL;
 
@@ -642,8 +644,7 @@ static void *dlinfo_download(void *arg)
 	}
 
 	err_dbg(1, "\nthread %d starting to download range: %ld-%ld\n",
-					(long)(*dp)->dp_no,
-					(*dp)->dp_start, (*dp)->dp_end);
+			(*dp)->dp_no, (*dp)->dp_start, (*dp)->dp_end);
 	dl->nthreads_inc(dl);
 	while ((*dp)->dp_start < (*dp)->dp_end) {
 		if (try_times++ > DI_TRY_TIMES_MAX) {

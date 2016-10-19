@@ -13,13 +13,26 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  *************************************************************************/
-#ifndef _DLCOMMON_H
-#define _DLCOMMON_H
+#ifndef _DLBUFFER_H
+#define _DLBUFFER_H
+#include <stdio.h>
 
-int getrcode(char *s);
-int getwcol(void);
-ssize_t writen(int fd, const void *buf, size_t count);
-char *geturi(const char *s, const char *u);
-char *string_decode(char *src);
-char *dlstrcasestr(const char *haystack, const char *needle);
+/*
+ * Note: it's just save all data in a single memory area, so if you want to
+ * store mass of data, more than 200MB or 2GB, it may failed.
+ *
+ * these API is used to replace open_memstream, because it's not implement on
+ * OSX yet.
+ */
+#define DLBUFFER_INCREASE_SIZE	4096
+
+struct dlbuffer {
+	char	*buf;
+	size_t	pos;
+	size_t	len;
+};
+
+int dlbuffer_write(struct dlbuffer *db, void *buf, size_t size);
+void dlbuffer_free(struct dlbuffer *db);
+struct dlbuffer *dlbuffer_new(void);
 #endif

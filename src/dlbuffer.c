@@ -13,13 +13,54 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  *************************************************************************/
-#ifndef _DLCOMMON_H
-#define _DLCOMMON_H
+#include "dlbuffer.h"
+#include <stdlib.h>
+#include <string.h>
 
-int getrcode(char *s);
-int getwcol(void);
-ssize_t writen(int fd, const void *buf, size_t count);
-char *geturi(const char *s, const char *u);
-char *string_decode(char *src);
-char *dlstrcasestr(const char *haystack, const char *needle);
-#endif
+static int dlbuffer_increase(struct dlbuffer *db)
+{
+	char *buf;
+	size_t len = db->len + DLBUFFER_INCREASE_SIZE;
+
+	buf = realloc(db->buf, len);
+
+	if (!buf)
+		return -1;
+
+	db->buf = buf;
+	db->len = len;
+	return 0;
+}
+
+int dlbuffer_write(struct dlbuffer *db, void *buf, size_t size)
+{
+	char *ptr = (char *)buf;
+
+	while (db->len - db->pos < size) {
+		if (dlbuffer_increase(db) < 0)
+			return -1;
+	}
+
+	memcpy(db->buf + db->pos, ptr, size);
+	db->pos += size;
+	return 0;
+}
+
+void dlbuffer_free(struct dlbuffer *db)
+{
+	if (!db)
+		return;
+	if (db->buf)
+		free(db->buf);
+	free(db);
+}
+
+struct dlbuffer *dlbuffer_new(void)
+{
+	struct dlbuffer *db = calloc(1, sizeof(*db));
+
+	if (!db)
+		return NULL;
+
+	return db;
+}

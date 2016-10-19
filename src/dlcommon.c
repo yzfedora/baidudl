@@ -13,6 +13,7 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  *************************************************************************/
+#include <ctype.h>
 #include <unistd.h>
 #include <stdlib.h>
 #include <string.h>
@@ -107,4 +108,28 @@ char *string_decode(char *src)
 	s[j] = 0;
 
 	return s;
+}
+
+char *dlstrcasestr(const char *haystack, const char *needle)
+{
+	size_t i;
+	size_t haystack_buflen = strlen(haystack) + 1;
+	size_t needle_buflen = strlen(needle) + 1;
+	char *haystack_buf = alloca(haystack_buflen);
+	char *needle_buf = alloca(needle_buflen);
+	char *needle_ptr;
+
+	if (!haystack_buf || !needle_buf)
+		return NULL;
+
+	for (i = 0; i < haystack_buflen; i++)
+		haystack_buf[i] = tolower((int)haystack[i]);
+
+	for (i = 0; i < needle_buflen; i++)
+		needle_buf[i] = tolower((int)needle[i]);
+
+	if (!(needle_ptr = strstr(haystack_buf, needle_buf)))
+		return NULL;
+
+	return (char *)haystack + (needle_ptr - haystack_buf);
 }
