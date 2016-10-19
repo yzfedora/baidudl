@@ -41,9 +41,10 @@
 #include "dlscrolling.h"
 #include "dlbuffer.h"
 
-#if  (!defined(_POSIX_C_SOURCE) || defined(_DARWIN_C_SOURCE))
-# define SIGWINCH 28 /* window size changes */
-# define SIGINFO 29  /* information request */
+#if (defined(__APPLE__) && defined(__MACH__))
+#ifndef SIGWINCH
+#define SIGWINCH 28 /* window size changes */
+#endif
 #endif
 
 #define PACKET_ARGS(pkt, dl, dp, start, end, no) 	\
