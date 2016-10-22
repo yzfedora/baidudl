@@ -67,7 +67,7 @@ try_write_end_again:
  */
 static void dlpart_write(struct dlpart *dp)
 {
-	int s, n, len = dp->dp_nrd;
+	int n, len = dp->dp_nrd;
 	char *buf = dp->dp_buf;
 	struct dlinfo *dl = dp->dp_info;
 
@@ -148,7 +148,6 @@ static void dlpart_delete(struct dlpart *dp)
 
 struct dlpart *dlpart_new(struct dlinfo *dl, ssize_t start, ssize_t end, int no)
 {
-	unsigned int try_times = 0;
 	struct dlpart *dp;
 
 	if (!(dp = (struct dlpart *)malloc(sizeof(*dp))))

@@ -15,6 +15,7 @@
  *************************************************************************/
 #define _POSIX_C_SOURCE 200809L
 #define _GNU_SOURCE
+#define USE_OPENSSL
 #include <stdio.h>
 #include <unistd.h>
 #include <stdlib.h>		/* strtol() */
@@ -40,6 +41,7 @@
 #include "dllist.h"
 #include "dlscrolling.h"
 #include "dlbuffer.h"
+#include "dlssl.h"
 
 #if (defined(__APPLE__) && defined(__MACH__))
 #ifndef SIGWINCH
@@ -112,7 +114,6 @@ static void dlinfo_args_unpack(struct args *args,
  */
 static int dlinfo_header_parsing(struct dlinfo *dl, char *header_buf)
 {
-	int n;
 	int code;
 	char tmp[DI_ENC_NAME_MAX];
 	char *p;
@@ -203,9 +204,9 @@ static size_t dlinfo_curl_header_callback(char *buf,
 static int dlinfo_init_without_head(struct dlinfo *dl)
 {
 	int ret = -1;
-	CURL *curl;
+	CURL *curl = NULL;
 	CURLcode rc;
-	struct dlbuffer *db;
+	struct dlbuffer *db = NULL;
 
 	if (!(db = dlbuffer_new())) {
 		err_sys("dlbuffer_new");
@@ -247,9 +248,9 @@ out:
 static int dlinfo_init(struct dlinfo *dl)
 {
 	int ret = -1;
-	CURL *curl;
+	CURL *curl = NULL;
 	CURLcode rc;
-	struct dlbuffer *db;
+	struct dlbuffer *db = NULL;
 
 	if (!(db = dlbuffer_new())) {
 		err_sys("dlbuffer_new");
@@ -351,7 +352,6 @@ static ssize_t dlinfo_records_recovery_all(struct dlinfo *dl)
 	/* this isn't necessary, but for a non-dependencies impl. */
 	lseek(dl->di_local, dl->di_length + sizeof(dl->di_nthreads), SEEK_SET);
 	for (i = 0; i < dl->di_nthreads; i++) {
-		struct packet_args *pkt;
 		/*
 		 * if dt is second pointer in the linked list, dt = dt->next.
 		 * we need to malloc a block memory for it.
@@ -799,6 +799,7 @@ void dlinfo_delete(struct dlinfo *dl)
 	struct dlthreads *dt = dl->di_threads;
 
 	pthread_mutex_destroy(&dl->di_mutex);
+	dlssl_locks_destroy();
 
 	/* close the local file descriptor */
 	if (dl->di_local >= 0 && close(dl->di_local) == -1)
@@ -851,7 +852,6 @@ static void dlinfo_bps_reset(struct dlinfo *dl)
 
 struct dlinfo *dlinfo_new(char *url, char *filename, int nthreads)
 {
-	int try_times = 0;
 	struct dlinfo *dl;
 
 	if (!(dl = calloc(1, sizeof(*dl))))
@@ -859,6 +859,7 @@ struct dlinfo *dlinfo_new(char *url, char *filename, int nthreads)
 
 	pthread_mutex_init(&dl->di_mutex, NULL);
 	curl_global_init(CURL_GLOBAL_ALL);
+	dlssl_locks_init();
 
 	memset(dl, 0, sizeof(*dl));
 	strcpy(dl->di_url, url);

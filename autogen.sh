@@ -1,4 +1,4 @@
 #!/bin/sh
 
 autoreconf --install || exit 1
-./configure
+CFLAGS="-Wall -O2" ./configure
