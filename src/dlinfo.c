@@ -241,6 +241,9 @@ static int dlinfo_init_without_head(struct dlinfo *dl)
 		goto out;;
 	}
 
+	if (!dl->di_filename[0] || dl->di_length <= 0)
+		goto out;
+
 	err_dbg(1, "filename=%s, length=%ld\n", dl->di_filename, dl->di_length);
 	ret = 0;
 out:
@@ -273,6 +276,9 @@ static int dlinfo_init(struct dlinfo *dl)
 		err_msg("curl_easy_perform: %s", curl_easy_strerror(rc));
 		goto out;;
 	}
+
+	if (!dl->di_filename[0] || dl->di_length <= 0)
+		goto out;
 
 	err_dbg(1, "filename=%s, length=%ld\n", dl->di_filename, dl->di_length);
 	ret = 0;
