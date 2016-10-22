@@ -65,7 +65,8 @@ struct dlinfo {
 
 	pthread_mutex_t	di_mutex;
 
-	struct dlthreads *di_threads;
+	struct dlthreads	*di_threads;
+	struct dlbuffer		*di_buffer;	/* used to cache header */
 
 	void (*nthreads_inc)(struct dlinfo *);
 	void (*nthreads_dec)(struct dlinfo *);

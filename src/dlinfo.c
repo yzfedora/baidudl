@@ -185,18 +185,32 @@ static size_t dlinfo_curl_header_callback(char *buf,
 					  size_t nmemb,
 					  void *userdata)
 {
+	int ret;
 	size_t len = size * nmemb;
-	struct dlbuffer *db = (struct dlbuffer *)userdata;
+	struct dlinfo *dl = (struct dlinfo *)userdata;
 
-	if (dlbuffer_write(db, buf, len) < 0)
+	if (!dl->di_buffer) {
+		if (!(dl->di_buffer = dlbuffer_new())) {
+			err_sys("dlbuffer_new");
+			return 0;
+		}
+	}
+
+	if (dlbuffer_write(dl->di_buffer, buf, len) < 0)
 		return 0;
 
 	/*
 	 * force to terminate libcurl to call this write function, because
 	 * we have get entire header.
 	 */
-	if (!strcmp(buf, "\r\n"))
-		return 0;
+	if (!strcmp(buf, "\r\n")) {
+		ret = dlinfo_header_parsing(dl, dl->di_buffer->buf);
+		dlbuffer_free(dl->di_buffer);
+		dl->di_buffer = NULL;
+
+		if (!ret)
+			return 0;
+	}
 
 	return len;
 }
@@ -206,12 +220,7 @@ static int dlinfo_init_without_head(struct dlinfo *dl)
 	int ret = -1;
 	CURL *curl = NULL;
 	CURLcode rc;
-	struct dlbuffer *db = NULL;
 
-	if (!(db = dlbuffer_new())) {
-		err_sys("dlbuffer_new");
-		goto out;
-	}
 
 	if (!(curl = curl_easy_init())) {
 		err_msg("curl_easy_init");
@@ -225,21 +234,16 @@ static int dlinfo_init_without_head(struct dlinfo *dl)
 	curl_easy_setopt(curl, CURLOPT_HEADER, 1L);
 	curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION,
 			 dlinfo_curl_header_callback);
-	curl_easy_setopt(curl, CURLOPT_WRITEDATA, db);
+	curl_easy_setopt(curl, CURLOPT_WRITEDATA, dl);
 
 	if ((rc = curl_easy_perform(curl)) && rc != CURLE_WRITE_ERROR) {
 		err_msg("curl_easy_perform: %s", curl_easy_strerror(rc));
 		goto out;;
 	}
 
-	if (dlinfo_header_parsing_all(dl, db->buf))
-		goto out;
-
 	err_dbg(1, "filename=%s, length=%ld\n", dl->di_filename, dl->di_length);
 	ret = 0;
 out:
-	if (db)
-		dlbuffer_free(db);
 	if (curl)
 		curl_easy_cleanup(curl);
 	return ret;
@@ -250,12 +254,6 @@ static int dlinfo_init(struct dlinfo *dl)
 	int ret = -1;
 	CURL *curl = NULL;
 	CURLcode rc;
-	struct dlbuffer *db = NULL;
-
-	if (!(db = dlbuffer_new())) {
-		err_sys("dlbuffer_new");
-		goto out;
-	}
 
 	if (!(curl = curl_easy_init())) {
 		err_msg("curl_easy_init");
@@ -269,21 +267,16 @@ static int dlinfo_init(struct dlinfo *dl)
 	curl_easy_setopt(curl, CURLOPT_NOBODY, 1L);
 	curl_easy_setopt(curl, CURLOPT_HEADERFUNCTION,
 			 dlinfo_curl_header_callback);
-	curl_easy_setopt(curl, CURLOPT_HEADERDATA, db);
+	curl_easy_setopt(curl, CURLOPT_HEADERDATA, dl);
 
 	if ((rc = curl_easy_perform(curl)) && rc != CURLE_WRITE_ERROR) {
 		err_msg("curl_easy_perform: %s", curl_easy_strerror(rc));
 		goto out;;
 	}
 
-	if (dlinfo_header_parsing_all(dl, db->buf))
-		goto out;
-
 	err_dbg(1, "filename=%s, length=%ld\n", dl->di_filename, dl->di_length);
 	ret = 0;
 out:
-	if (db)
-		dlbuffer_free(db);
 	if (curl)
 		curl_easy_cleanup(curl);
 	return ret;
