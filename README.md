@@ -5,31 +5,38 @@ https instead of http, and also they are using https 302 redirect, this caused
 our program can't resolve the correct download url. and I just fix it today :-)
 
 百度网盘多线程下载工具, 支持协议http, https, ftp, 支持平台Linux, Unix-Like,
-OSX, Windows, 支持断点续传.
+OSX, 支持断点续传.
 
-Notice:
-    pan.baidu.com has no longer supports the HTTP HEAD request for batch
-    download url, that's meaning we can't use multithreadding for this
-    kind of url, I guess this is because the batch download has some bugs
-    in their servers, because I have found some bug indeed. so they return
-    a HTTP 405 Not Allowed error to prevent some tools use multithreadding
-    to download it, I think this is reasonable, but the best way is to fix
-    this bug.
 ![image](https://github.com/yzfedora/baidudl/raw/master/demo.png)
 
-# next steps
+# Tips
+if you find the download speed become very slow, even smaller than 100
+KiB/s, you can type Ctrl-C first to stop it. and restore again. and don't
+forget to use "-n" option to specify use how many number of threads to
+download, normally, I use set it to 100 or 200 according the situation.
+
+# Bugs
+1. there is a bug in pan.baidu.com, especially when try specify a batch
+   download url, pan.baidu.com may send broken file data to you. in this
+   situation, you will see some files was broken after you unzip. you can
+   choose to download broken files only, or just remove the download file,
+   and try again.
+2. there still exists an "Illegal Hardware Instruction" bug on Mac OSX, I
+   have tried to find why it failed, but with no luck.
+
+# Next Steps
 1. add CRC32 or MD5 checksum supports, for integrality check.
 2. compile rpm, deb package for different Linux distributions if need.
-3. I think maybe it's good to compile a OSX and Windows version, but I don't
-   have MacBook, so it's hard. for Windows version, maybe I will try use
-   MinGW to accomplish it.
+3. try fix "Illegal Hardware Instruction" bug on Mac OSX.
 
-# recently updates
+# Recently Updates
 1. use libcurl to supports http, https, and ftp multithreading download.
 2. use valentine background for status bar.
 3. use -f option to download from file. -l option is deprecated.
+4. use internal cache mechanism to optimize the IO speed.
+5. change the default threads number to 100.
 
-# features
+# Features
 1. multithreading download, number of threads depending on server.
 2. continues download, supports restore download from a previous file.
 3. http, https, ftp protocol supports. (axel is great, but no https supports)
