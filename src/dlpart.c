@@ -154,7 +154,7 @@ static void dlpart_delete(struct dlpart *dp)
 	if (dp->dp_curl)
 		curl_easy_cleanup(dp->dp_curl);
 	if (dp->dp_buf)
-		dlbuffer_free(dp->dp_buf);
+		dlbuffer_delete(dp->dp_buf);
 	free(dp);
 }
 

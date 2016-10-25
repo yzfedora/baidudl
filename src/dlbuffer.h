@@ -33,6 +33,6 @@ struct dlbuffer {
 };
 
 int dlbuffer_write(struct dlbuffer *db, void *buf, size_t size);
-void dlbuffer_free(struct dlbuffer *db);
+void dlbuffer_delete(struct dlbuffer *db);
 struct dlbuffer *dlbuffer_new(void);
 #endif

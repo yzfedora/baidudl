@@ -46,7 +46,7 @@ int dlbuffer_write(struct dlbuffer *db, void *buf, size_t size)
 	return 0;
 }
 
-void dlbuffer_free(struct dlbuffer *db)
+void dlbuffer_delete(struct dlbuffer *db)
 {
 	if (!db)
 		return;

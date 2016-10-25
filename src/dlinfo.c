@@ -187,7 +187,7 @@ static size_t dlinfo_curl_header_callback(char *buf,
 	 */
 	if (!strcmp(buf, "\r\n")) {
 		ret = dlinfo_header_parsing(dl, dl->di_buffer->buf);
-		dlbuffer_free(dl->di_buffer);
+		dlbuffer_delete(dl->di_buffer);
 		dl->di_buffer = NULL;
 
 		if (!ret)
