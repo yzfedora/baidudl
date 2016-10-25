@@ -162,24 +162,6 @@ static int dlinfo_header_parsing(struct dlinfo *dl, char *header_buf)
 	return -1;
 }
 
-static int dlinfo_header_parsing_all(struct dlinfo *dl, char *header_buf)
-{
-	char *sep = header_buf;
-
-	if (!header_buf)
-		return -1;
-
-	do {
-		if (!dlinfo_header_parsing(dl, sep))
-			return 0;
-
-		if ((sep = strstr(sep, "\r\n\r\n")))
-			sep += 4;
-	} while (sep);
-
-	return -1;
-}
-
 static size_t dlinfo_curl_header_callback(char *buf,
 					  size_t size,
 					  size_t nmemb,
@@ -631,43 +613,30 @@ static void dlinfo_alarm_launch(void)
  */
 static void *dlinfo_download(void *arg)
 {
-	int try_times = 0;
-	int orig_no;
-	size_t orig_start, orig_end;
+	int no;
+	size_t start, end;
 	struct dlpart **dp = NULL;
 	struct dlinfo *dl = NULL;
 
 	/* Unpacket the struct packet_args. */
 	dlinfo_args_unpack((struct args *)arg, &dl, &dp,
-			   &orig_start, &orig_end, &orig_no);
-
-	if (!(*dp = dlpart_new(dl, orig_start, orig_end, orig_no))) {
-		err_msg("error, try download range: %ld - %ld again",
-						orig_start, orig_end);
-		return NULL;
-	}
+			   &start, &end, &no);
 
 	err_dbg(1, "\nthread %d starting to download range: %ld-%ld\n",
-			(*dp)->dp_no, (*dp)->dp_start, (*dp)->dp_end);
+						no, start, end);
+
 	dl->nthreads_inc(dl);
-	while ((*dp)->dp_start < (*dp)->dp_end) {
-		if (try_times++ > DI_TRY_TIMES_MAX) {
+	while (start < end) {
+		if (!(*dp = dlpart_new(dl, start, end, no))) {
 			err_msg("thread %d failed to download range: %ld-%ld",
-				(*dp)->dp_no, (*dp)->dp_start, (*dp)->dp_end);
+						no, start, end);
 			break;
 		}
 
 		(*dp)->launch(*dp);
-		orig_start = (*dp)->dp_start;
-		orig_end = (*dp)->dp_end;
+		start = (*dp)->dp_start;
+		end = (*dp)->dp_end;
 		(*dp)->delete(*dp);
-
-		if (!(*dp = dlpart_new(dl, orig_start, orig_end, orig_no))) {
-			err_msg("error, try download range: %ld - %ld again",
-				orig_start, orig_end);
-			return NULL;
-		}
-		sleep(1);
 	}
 	dl->nthreads_dec(dl);
 

@@ -89,7 +89,7 @@ static void download_from_file(const char *listfile, int nts)
 
 int main(int argc, char *argv[])
 {
-	int opt, nthreads = 10;	/* default using 4 threads to download */
+	int opt, nthreads = 100;/* defa use 100 threads */
 	char *filename = NULL;
 	char *listfile = NULL;	/* which stored the download list */
 

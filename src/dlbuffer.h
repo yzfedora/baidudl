@@ -24,7 +24,7 @@
  * these API is used to replace open_memstream, because it's not implement on
  * OSX yet.
  */
-#define DLBUFFER_INCREASE_SIZE	4096
+#define DLBUFFER_INCREASE_SIZE	(1 << 18)	/* 256 KiB */
 
 struct dlbuffer {
 	char	*buf;

@@ -23,12 +23,11 @@
 
 struct dlpart {
 	CURL	*dp_curl;
-	int	dp_no;
 	ssize_t	dp_start;
 	ssize_t	dp_end;
-	char	*dp_buf;
-	int	dp_nrd;
-	struct dlinfo *dp_info;
+	int	dp_no;
+	struct dlbuffer	*dp_buf;
+	struct dlinfo	*dp_info;
 
 	int (*launch)(struct dlpart *);
 	void (*delete)(struct dlpart *);

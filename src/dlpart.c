@@ -33,6 +33,7 @@
 #include "err_handler.h"
 #include "dlpart.h"
 #include "dlcommon.h"
+#include "dlbuffer.h"
 
 
 /*
@@ -61,15 +62,10 @@ try_write_end_again:
 		goto try_write_end_again;
 }
 
-/*
- * Write 'dp->dp_nrd' data which pointed by 'dp->dp_buf' to local file.
- * And the offset 'dp->dp_start' will be updated also.
- */
 static void dlpart_write(struct dlpart *dp)
 {
-	int n, len = dp->dp_nrd;
-	char *buf = dp->dp_buf;
-	struct dlinfo *dl = dp->dp_info;
+	int n, len = dp->dp_buf->pos;
+	char *buf = dp->dp_buf->buf;
 
 	while (len > 0) {
 		n = pwrite(dp->dp_info->di_local, buf, len, dp->dp_start);
@@ -86,8 +82,6 @@ static void dlpart_write(struct dlpart *dp)
 		}
 	}
 
-	dl->total_read_update(dl, dp->dp_nrd);
-	dl->bps_update(dl, dp->dp_nrd);
 
 	dlpart_update(dp);
 }
@@ -98,12 +92,25 @@ static size_t dlpart_write_callback(char *buf,
 				    void *userdata)
 {
 	struct dlpart *dp = (struct dlpart *)userdata;
+	struct dlinfo *dl = dp->dp_info;
+	size_t len = size *nitems;
 
-	dp->dp_nrd = size * nitems;
-	dp->dp_buf = buf;
+	if (dlbuffer_write(dp->dp_buf, buf, len) < 0)
+		return 0;
 
-	dlpart_write(dp);
-	return dp->dp_nrd;
+	dl->total_read_update(dl, len);
+	dl->bps_update(dl, len);
+
+	/*
+	 * to make the IO as fast as possible, we use dlbuffer APIs to cache
+	 * the data, and write to disk when cached more than 1MiB bytes.
+	 */
+	if (dp->dp_buf->pos > (1 << 20)) {
+		dlpart_write(dp);
+		dp->dp_buf->pos = 0;
+	}
+
+	return len;
 }
 
 static int dlpart_curl_setup(struct dlpart *dp)
@@ -124,15 +131,19 @@ static int dlpart_curl_setup(struct dlpart *dp)
 
 static int dlpart_launch(struct dlpart *dp)
 {
+	int ret = -1;
 	CURLcode rc;
 
 	dlpart_curl_setup(dp);
 	if ((rc = curl_easy_perform(dp->dp_curl))) {
 		err_msg("curl_easy_perform: %s", curl_easy_strerror(rc));
-		return -1;
+		goto out;
 	}
 
-	return 0;
+	ret = 0;
+out:
+	dlpart_write(dp);
+	return ret;
 }
 
 static void dlpart_delete(struct dlpart *dp)
@@ -142,22 +153,27 @@ static void dlpart_delete(struct dlpart *dp)
 
 	if (dp->dp_curl)
 		curl_easy_cleanup(dp->dp_curl);
-
+	if (dp->dp_buf)
+		dlbuffer_free(dp->dp_buf);
 	free(dp);
 }
 
 struct dlpart *dlpart_new(struct dlinfo *dl, ssize_t start, ssize_t end, int no)
 {
-	struct dlpart *dp;
+	struct dlpart *dp = NULL;
 
 	if (!(dp = (struct dlpart *)malloc(sizeof(*dp))))
-		return NULL;
+		goto out;
 
 	memset(dp, 0, sizeof(*dp));
 	if (!(dp->dp_curl = curl_easy_init())) {
 		err_msg("curl_easy_init");
-		dlpart_delete(dp);
-		return NULL;
+		goto out;
+	}
+
+	if (!(dp->dp_buf = dlbuffer_new())) {
+		err_sys("dlbuffer_new");
+		goto out;
 	}
 
 	dp->dp_no = no;
@@ -171,4 +187,7 @@ struct dlpart *dlpart_new(struct dlinfo *dl, ssize_t start, ssize_t end, int no)
 	dlpart_update(dp);	/* Force to write the record into end of file*/
 
 	return dp;
+out:
+	dlpart_delete(dp);
+	return NULL;
 }
