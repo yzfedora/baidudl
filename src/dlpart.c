@@ -86,10 +86,10 @@ static void dlpart_write(struct dlpart *dp)
 	dlpart_update(dp);
 }
 
-static size_t dlpart_header_callback(char *buf,
-				     size_t size,
-				     size_t nitems,
-				     void *userdata)
+static size_t dlpart_http_header_callback(char *buf,
+					  size_t size,
+					  size_t nitems,
+					  void *userdata)
 {
 	size_t len = size * nitems;
 	struct dlpart *dp = (struct dlpart *)userdata;
@@ -105,7 +105,6 @@ static size_t dlpart_header_callback(char *buf,
 	}
 
 	return len;
-
 }
 
 static size_t dlpart_write_callback(char *buf,
@@ -150,7 +149,7 @@ static int dlpart_curl_setup(struct dlpart *dp)
 	/* do HTTP response code check if the url is HTTP or HTTPS. */
 	if (dp->dp_info->di_url_is_http) {
 		curl_easy_setopt(dp->dp_curl, CURLOPT_HEADERFUNCTION,
-				 dlpart_header_callback);
+				 dlpart_http_header_callback);
 		curl_easy_setopt(dp->dp_curl, CURLOPT_HEADERDATA, dp);
 	}
 
