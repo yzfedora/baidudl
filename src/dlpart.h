@@ -23,10 +23,11 @@
 
 struct dlpart {
 	CURL	*dp_curl;
-	ssize_t	dp_start;
-	ssize_t	dp_end;
-	int	dp_no;
-	struct dlbuffer	*dp_buf;
+	ssize_t	dp_start;	/* start position */
+	ssize_t	dp_end;		/* end position */
+	int	dp_no;		/* thread number */
+	int	dp_ready;	/* set to 0, if get wrong HTTP response code */
+	struct dlbuffer	*dp_buf;/* where the data be cached */
 	struct dlinfo	*dp_info;
 
 	int (*launch)(struct dlpart *);

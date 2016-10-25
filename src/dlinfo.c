@@ -112,7 +112,7 @@ static void dlinfo_args_unpack(struct args *args,
  * Receive the response from the server, which include the HEAD info. And
  * store result to dl->di_length, dl->di_filename.
  */
-static int dlinfo_header_parsing(struct dlinfo *dl, char *header_buf)
+static int dlinfo_http_header_parsing_all(struct dlinfo *dl, char *header_buf)
 {
 	int code;
 	char tmp[DI_ENC_NAME_MAX];
@@ -121,7 +121,7 @@ static int dlinfo_header_parsing(struct dlinfo *dl, char *header_buf)
 	err_dbg(2, "--------------Received Meta info---------------\n"
 						"%s\n", header_buf);
 
-	if (strncmp(dl->di_url, "ftp://", 6)) {
+	if (dl->di_url_is_http) {
 		code = getrcode(header_buf);
 		if (code < 200 || code >= 300) {
 			return -1;
@@ -132,6 +132,8 @@ static int dlinfo_header_parsing(struct dlinfo *dl, char *header_buf)
 	if ((p = dlstrcasestr(header_buf, HEADER_CONTENT_LENGTH))) {
 		dl->di_length = strtol(p + sizeof(HEADER_CONTENT_LENGTH) - 1,
 				       NULL, 10);
+		if (dl->di_length <= 0)
+			return -1;
 	}
 
 	/* User specified filename */
@@ -148,61 +150,54 @@ static int dlinfo_header_parsing(struct dlinfo *dl, char *header_buf)
 		}
 		strncpy(dl->di_filename, string_decode(tmp),
 			sizeof(dl->di_filename) - 1);
-		return 0;
+	} else {
+		get_filename_from_url(dl);
 	}
 
-	/* if filename parsing failed, then parsing filename from url. */
-	if ((p = strrchr(dl->di_url, '/'))) {
-		strcpy(tmp, p + 1);
-		strncpy(dl->di_filename, string_decode(tmp),
-			sizeof(dl->di_filename) - 1);
-		return 0;
+	return 0;
+}
+
+/*
+ * return 0 if HTTP response parsing success, otherwise, -1 will be returned.
+ */
+static int dlinfo_http_header_parsing(struct dlinfo *dl, char *buf, size_t len)
+{
+	if (dlbuffer_write(dl->di_buffer, buf, len) < 0)
+		return -1;
+
+	if (!strcmp(buf, "\r\n")) {
+		return dlinfo_http_header_parsing_all(dl, dl->di_buffer->buf);
 	}
 
 	return -1;
 }
 
-static size_t dlinfo_curl_header_callback(char *buf,
+static size_t dlinfo_http_header_callback(char *buf,
 					  size_t size,
 					  size_t nmemb,
 					  void *userdata)
 {
-	int ret;
 	size_t len = size * nmemb;
 	struct dlinfo *dl = (struct dlinfo *)userdata;
 
-	if (!dl->di_buffer) {
-		if (!(dl->di_buffer = dlbuffer_new())) {
-			err_sys("dlbuffer_new");
-			return 0;
-		}
-	}
-
-	if (dlbuffer_write(dl->di_buffer, buf, len) < 0)
+	if (!dlinfo_http_header_parsing(dl, buf, len))
 		return 0;
-
-	/*
-	 * force to terminate libcurl to call this write function, because
-	 * we have get entire header.
-	 */
-	if (!strcmp(buf, "\r\n")) {
-		ret = dlinfo_header_parsing(dl, dl->di_buffer->buf);
-		dlbuffer_delete(dl->di_buffer);
-		dl->di_buffer = NULL;
-
-		if (!ret)
-			return 0;
-	}
 
 	return len;
 }
 
+/*
+ * If server don't allowed us to use HTTP HEAD request, then we send a normal
+ * HTTP request to server, and parsing the file length by manually.
+ */
 static int dlinfo_init_without_head(struct dlinfo *dl)
 {
 	int ret = -1;
 	CURL *curl = NULL;
 	CURLcode rc;
 
+	if (!dl->di_url_is_http)
+		goto out;
 
 	if (!(curl = curl_easy_init())) {
 		err_msg("curl_easy_init");
@@ -215,7 +210,7 @@ static int dlinfo_init_without_head(struct dlinfo *dl)
 	curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
 	curl_easy_setopt(curl, CURLOPT_HEADER, 1L);
 	curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION,
-			 dlinfo_curl_header_callback);
+			 dlinfo_http_header_callback);
 	curl_easy_setopt(curl, CURLOPT_WRITEDATA, dl);
 
 	if ((rc = curl_easy_perform(curl)) && rc != CURLE_WRITE_ERROR) {
@@ -226,7 +221,6 @@ static int dlinfo_init_without_head(struct dlinfo *dl)
 	if (!dl->di_filename[0] || dl->di_length <= 0)
 		goto out;
 
-	err_dbg(1, "filename=%s, length=%ld\n", dl->di_filename, dl->di_length);
 	ret = 0;
 out:
 	if (curl)
@@ -250,19 +244,44 @@ static int dlinfo_init(struct dlinfo *dl)
 	curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 0L);
 	curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
 	curl_easy_setopt(curl, CURLOPT_NOBODY, 1L);
-	curl_easy_setopt(curl, CURLOPT_HEADERFUNCTION,
-			 dlinfo_curl_header_callback);
-	curl_easy_setopt(curl, CURLOPT_HEADERDATA, dl);
 
-	if ((rc = curl_easy_perform(curl)) && rc != CURLE_WRITE_ERROR) {
-		err_msg("curl_easy_perform: %s", curl_easy_strerror(rc));
+	if (dl->di_url_is_http) {
+		/*
+		 * parsing the header by ourself if the url is HTTP or HTTPS.
+		 */
+		curl_easy_setopt(curl, CURLOPT_HEADERFUNCTION,
+				 dlinfo_http_header_callback);
+		curl_easy_setopt(curl, CURLOPT_HEADERDATA, dl);
+	}
+
+	if ((rc = curl_easy_perform(curl))) {
+		if (!(dl->di_url_is_http && rc == CURLE_WRITE_ERROR))
+			err_msg("curl_easy_perform: %s",
+				curl_easy_strerror(rc));
 		goto out;;
+	}
+
+	if (!dl->di_url_is_http) {
+		/*
+		 * if the url is not HTTP or HTTPS, we use curl to get file
+		 * length.
+		 */
+		double length;
+		if ((rc = curl_easy_getinfo(curl,
+					    CURLINFO_CONTENT_LENGTH_DOWNLOAD,
+					    &length))) {
+			err_msg("curl_easy_getinfo: %s",
+				curl_easy_strerror(rc));
+			goto out;
+		}
+
+		dl->di_length = length;
+		get_filename_from_url(dl);
 	}
 
 	if (!dl->di_filename[0] || dl->di_length <= 0)
 		goto out;
 
-	err_dbg(1, "filename=%s, length=%ld\n", dl->di_filename, dl->di_length);
 	ret = 0;
 out:
 	if (curl)
@@ -766,8 +785,12 @@ void dlinfo_delete(struct dlinfo *dl)
 {
 	struct dlthreads *dt = dl->di_threads, *tmp;
 
+	curl_global_cleanup();
 	pthread_mutex_destroy(&dl->di_mutex);
 	dlssl_locks_destroy();
+
+	if (dl->di_buffer)
+		dlbuffer_delete(dl->di_buffer);
 
 	/* close the local file descriptor */
 	if (dl->di_local >= 0 && close(dl->di_local) == -1)
@@ -778,8 +801,8 @@ void dlinfo_delete(struct dlinfo *dl)
 		dt = dt->next;
 		free(tmp);
 	}
+
 	free(dl);
-	curl_global_cleanup();
 }
 
 static void dlinfo_nthreads_running_inc(struct dlinfo *dl)
@@ -822,17 +845,23 @@ struct dlinfo *dlinfo_new(char *url, char *filename, int nthreads)
 	struct dlinfo *dl;
 
 	if (!(dl = calloc(1, sizeof(*dl))))
-		return NULL;
+		goto out;
 
-	pthread_mutex_init(&dl->di_mutex, NULL);
 	curl_global_init(CURL_GLOBAL_ALL);
+	pthread_mutex_init(&dl->di_mutex, NULL);
 	dlssl_locks_init();
 
 	memset(dl, 0, sizeof(*dl));
+	if (!(dl->di_buffer = dlbuffer_new())) {
+		err_sys("dlbuffer_new");
+		goto out;
+	}
+
 	strcpy(dl->di_url, url);
 	if (filename)
 		strcpy(dl->di_filename, filename);
 
+	dl->di_url_is_http = url_is_http(dl->di_url);
 	dl->di_nthreads = nthreads;
 
 	dl->nthreads_inc = dlinfo_nthreads_running_inc;
@@ -843,14 +872,13 @@ struct dlinfo *dlinfo_new(char *url, char *filename, int nthreads)
 	dl->launch = dlinfo_launch;
 	dl->delete = dlinfo_delete;
 
-	/* 
+	/*
 	 * parsing the url, for remote server's service and hostname.
 	 * and establish a temporary connection used to send HTTP HEAD
 	 * request, that we can retriving the length and filename.
 	 */
 	if (dlinfo_init(dl) && dlinfo_init_without_head(dl)) {
-		dl->delete(dl);
-		return NULL;
+		goto out;
 	}
 
 	dlinfo_open_local_file(dl);
@@ -863,5 +891,10 @@ struct dlinfo *dlinfo_new(char *url, char *filename, int nthreads)
 	 * download task.
 	 */
 	dllist_put(dl);
+
+	err_dbg(1, "filename=%s, length=%ld\n", dl->di_filename, dl->di_length);
 	return dl;
+out:
+	dl->delete(dl);
+	return NULL;
 }

@@ -86,6 +86,28 @@ static void dlpart_write(struct dlpart *dp)
 	dlpart_update(dp);
 }
 
+static size_t dlpart_header_callback(char *buf,
+				     size_t size,
+				     size_t nitems,
+				     void *userdata)
+{
+	size_t len = size * nitems;
+	struct dlpart *dp = (struct dlpart *)userdata;
+
+	if (dlbuffer_write(dp->dp_buf, buf, len) < 0)
+		return 0;
+
+	if (!strcmp(buf, "\r\n")) {
+		int rc = getrcode(dp->dp_buf->buf);
+		if (rc != 200 && rc != 206)
+			dp->dp_ready = 0;
+		dp->dp_buf->pos = 0;
+	}
+
+	return len;
+
+}
+
 static size_t dlpart_write_callback(char *buf,
 				    size_t size,
 				    size_t nitems,
@@ -94,6 +116,9 @@ static size_t dlpart_write_callback(char *buf,
 	struct dlpart *dp = (struct dlpart *)userdata;
 	struct dlinfo *dl = dp->dp_info;
 	size_t len = size *nitems;
+
+	if (!dp->dp_ready)
+		return 0;
 
 	if (dlbuffer_write(dp->dp_buf, buf, len) < 0)
 		return 0;
@@ -121,6 +146,14 @@ static int dlpart_curl_setup(struct dlpart *dp)
 	curl_easy_setopt(dp->dp_curl, CURLOPT_RANGE, range);
 	curl_easy_setopt(dp->dp_curl, CURLOPT_URL, dp->dp_info->di_url);
 	curl_easy_setopt(dp->dp_curl, CURLOPT_FOLLOWLOCATION, 1);
+
+	/* do HTTP response code check if the url is HTTP or HTTPS. */
+	if (dp->dp_info->di_url_is_http) {
+		curl_easy_setopt(dp->dp_curl, CURLOPT_HEADERFUNCTION,
+				 dlpart_header_callback);
+		curl_easy_setopt(dp->dp_curl, CURLOPT_HEADERDATA, dp);
+	}
+
 	curl_easy_setopt(dp->dp_curl, CURLOPT_WRITEFUNCTION,
 			 dlpart_write_callback);
 	curl_easy_setopt(dp->dp_curl, CURLOPT_WRITEDATA, dp);
@@ -136,7 +169,7 @@ static int dlpart_launch(struct dlpart *dp)
 
 	dlpart_curl_setup(dp);
 	if ((rc = curl_easy_perform(dp->dp_curl))) {
-		err_msg("curl_easy_perform: %s", curl_easy_strerror(rc));
+		err_dbg(2, "curl_easy_perform: %s", curl_easy_strerror(rc));
 		goto out;
 	}
 
@@ -176,6 +209,7 @@ struct dlpart *dlpart_new(struct dlinfo *dl, ssize_t start, ssize_t end, int no)
 		goto out;
 	}
 
+	dp->dp_ready = 1;
 	dp->dp_no = no;
 	dp->dp_info = dl;
 

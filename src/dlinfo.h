@@ -60,6 +60,8 @@ struct dlinfo {
 	size_t	di_total_read;		/* total read(received) bytes */
 	size_t	di_bps;			/* bytes per second, speed */
 
+
+	int	di_url_is_http;		/* use to check HTTP or HTTPS code */
 	int	di_recovery:1;		/* recovery from previous file */
 	int	di_try_ignore_records:1;/* prevent restore from invalid file */
 

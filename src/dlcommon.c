@@ -38,6 +38,31 @@ int getrcode(char *s)
 	return -1;
 }
 
+int url_is_http(const char *url)
+{
+	if (!strncmp(url, "http://", 7) ||
+	    !strncmp(url, "https://", 8) ||
+	    !strstr(url, "://"))
+		return 1;
+
+	return 0;
+}
+
+void get_filename_from_url(struct dlinfo *dl)
+{
+	char *p;
+	char tmp[DI_ENC_NAME_MAX];
+
+	if ((p = strrchr(dl->di_url, '/')))
+		strncpy(tmp, p + 1, sizeof(tmp) - 1);
+	else
+		strncpy(tmp, dl->di_url, sizeof(tmp) - 1);
+
+	tmp[DI_ENC_NAME_MAX - 1] = 0;
+	strncpy(dl->di_filename, string_decode(tmp),
+		sizeof(dl->di_filename) - 1);
+}
+
 int getwcol(void)
 {
 	struct winsize size;

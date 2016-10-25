@@ -15,11 +15,13 @@
  *************************************************************************/
 #ifndef _DLCOMMON_H
 #define _DLCOMMON_H
+#include "dlinfo.h"
 
 int getrcode(char *s);
+int url_is_http(const char *url);
+void get_filename_from_url(struct dlinfo *dl);
 int getwcol(void);
 ssize_t writen(int fd, const void *buf, size_t count);
-char *geturi(const char *s, const char *u);
 char *string_decode(char *src);
 char *dlstrcasestr(const char *haystack, const char *needle);
 #endif
