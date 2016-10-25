@@ -14,6 +14,9 @@ if you find the download speed become very slow, even smaller than 100
 KiB/s, you can type Ctrl-C first to stop it. and restore again. and don't
 forget to use "-n" option to specify use how many number of threads to
 download, normally, I use set it to 100 or 200 according the situation.
+but, please be care, for every threads, the program will use at least 1 MiB
+to cache. so default memory usage will be 100 threads x 1 MiB per thread = 100
+MiB.
 
 # Bugs
 1. there is a bug in pan.baidu.com, especially when try specify a batch

@@ -764,7 +764,7 @@ try_ignore_records_again:
 
 void dlinfo_delete(struct dlinfo *dl)
 {
-	struct dlthreads *dt = dl->di_threads;
+	struct dlthreads *dt = dl->di_threads, *tmp;
 
 	pthread_mutex_destroy(&dl->di_mutex);
 	dlssl_locks_destroy();
@@ -774,10 +774,9 @@ void dlinfo_delete(struct dlinfo *dl)
 		err_sys("close");
 
 	while (dt) {
-		if (dt->dp) {
-			dt->dp->delete(dt->dp);
-		}
+		tmp = dt;
 		dt = dt->next;
+		free(tmp);
 	}
 	free(dl);
 	curl_global_cleanup();
