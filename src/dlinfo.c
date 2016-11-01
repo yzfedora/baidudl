@@ -196,6 +196,7 @@ static int dlinfo_init_without_head(struct dlinfo *dl)
 	CURL *curl = NULL;
 	CURLcode rc;
 
+	dlbuffer_set_offset(dl->di_buffer, 0);
 	if (!dl->di_url_is_http)
 		goto out;
 
@@ -234,6 +235,7 @@ static int dlinfo_init(struct dlinfo *dl)
 	CURL *curl = NULL;
 	CURLcode rc;
 
+	dlbuffer_set_offset(dl->di_buffer, 0);
 	if (!(curl = curl_easy_init())) {
 		err_msg("curl_easy_init");
 		goto out;

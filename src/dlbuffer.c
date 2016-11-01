@@ -32,6 +32,26 @@ static int dlbuffer_increase(struct dlbuffer *db)
 	return 0;
 }
 
+/*
+ * maybe inline following a few functions is a good idea, but we can let
+ * compile to do the choose. and normally this is not the performance
+ * bottleneck.
+ */
+char *dlbuffer_get_buffer(struct dlbuffer *db)
+{
+	return db->buf;
+}
+
+size_t dlbuffer_get_offset(struct dlbuffer *db)
+{
+	return db->pos;
+}
+
+void dlbuffer_set_offset(struct dlbuffer *db, size_t pos)
+{
+	db->pos = pos;
+}
+
 int dlbuffer_write(struct dlbuffer *db, void *buf, size_t size)
 {
 	char *ptr = (char *)buf;

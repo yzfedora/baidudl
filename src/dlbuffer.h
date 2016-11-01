@@ -32,6 +32,9 @@ struct dlbuffer {
 	size_t	len;
 };
 
+char *dlbuffer_get_buffer(struct dlbuffer *db);
+size_t dlbuffer_get_offset(struct dlbuffer *db);
+void dlbuffer_set_offset(struct dlbuffer *db, size_t pos);
 int dlbuffer_write(struct dlbuffer *db, void *buf, size_t size);
 void dlbuffer_delete(struct dlbuffer *db);
 struct dlbuffer *dlbuffer_new(void);
