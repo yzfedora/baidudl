@@ -22,7 +22,7 @@
 #include <signal.h>
 #include <pthread.h>
 #include <sys/socket.h>
-#include <err_handler.h>
+#include "err_handler.h"
 #include "dlinfo.h"
 
 #if (defined(__APPLE__) && defined(__MACH__))
