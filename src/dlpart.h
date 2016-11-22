@@ -19,7 +19,8 @@
 #include <curl/curl.h>
 #include "dlinfo.h"
 
-#define DLPART_BUFSZ	(1024 * 1024)
+#define DLPART_BUFSZ		(1024 * 1024)
+#define DLPART_CACHE_SIZE	(1 << 20)		/* 8MiB */
 
 struct dlpart {
 	CURL	*dp_curl;

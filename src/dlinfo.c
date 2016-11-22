@@ -157,21 +157,6 @@ static int dlinfo_http_header_parsing_all(struct dlinfo *dl, char *header_buf)
 	return 0;
 }
 
-/*
- * return 0 if HTTP response parsing success, otherwise, -1 will be returned.
- */
-static int dlinfo_http_header_parsing(struct dlinfo *dl, char *buf, size_t len)
-{
-	if (dlbuffer_write(dl->di_buffer, buf, len) < 0)
-		return -1;
-
-	if (!strcmp(buf, "\r\n")) {
-		return dlinfo_http_header_parsing_all(dl, dl->di_buffer->buf);
-	}
-
-	return -1;
-}
-
 static size_t dlinfo_http_header_callback(char *buf,
 					  size_t size,
 					  size_t nmemb,
@@ -180,8 +165,16 @@ static size_t dlinfo_http_header_callback(char *buf,
 	size_t len = size * nmemb;
 	struct dlinfo *dl = (struct dlinfo *)userdata;
 
-	if (!dlinfo_http_header_parsing(dl, buf, len))
+	if (dlbuffer_write(dl->di_buffer, buf, len) < 0)
 		return 0;
+
+	if (!strcmp(buf, "\r\n")) {
+		dlbuffer_get_buffer(dl->di_buffer)[dlbuffer_get_offset(dl->di_buffer)] = 0;
+		if (!dlinfo_http_header_parsing_all(dl, dl->di_buffer->buf))
+			return 0;
+
+		dlbuffer_set_offset(dl->di_buffer, 0);
+	}
 
 	return len;
 }
@@ -508,7 +501,7 @@ static char *dlinfo_get_percentage(struct dlinfo *dl)
 	static char percentage_str[DI_PERCENTAGE_STR_MAX];
 
 	len = snprintf(percentage_str, sizeof(percentage_str), "%6.2f",
-			(double)dl->di_total_read * 100 / dl->di_total);
+			(double)dl->di_total_read / dl->di_total * 100);
 
 	percentage_str[len - 1] = 0;        /* prevent snprintf round up */
 	return percentage_str;

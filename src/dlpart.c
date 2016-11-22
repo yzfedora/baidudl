@@ -130,7 +130,7 @@ static size_t dlpart_write_callback(char *buf,
 	 * to make the IO as fast as possible, we use dlbuffer APIs to cache
 	 * the data, and write to disk when cached more than 1MiB bytes.
 	 */
-	if (dlbuffer_get_offset(dp->dp_buf) > (1 << 20)) {
+	if (dlbuffer_get_offset(dp->dp_buf) > DLPART_CACHE_SIZE) {
 		dlpart_write(dp);
 		dlbuffer_set_offset(dp->dp_buf, 0);
 	}
