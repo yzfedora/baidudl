@@ -37,7 +37,7 @@ static void usage(const char *progname)
 		"    -d level     enable debug level for ouput\n"
 		"    -n threads   specify the number of thread to download\n"
 		"    -o filename  specify the filename of output\n"
-		"    -l file      import urls from file(url may expire)\n"
+		"    -f file      import urls from file(url may expire)\n"
 		"    -h           display the help\n\n");
 	exit(EXIT_FAILURE);
 }
