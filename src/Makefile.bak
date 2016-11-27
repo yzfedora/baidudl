@@ -1,5 +1,5 @@
 PROGS	:= bdpandl
-TOOLS	:= bcmp bsearch repair
+TOOLS	:= bcmp bsearch repair bdpandl-decode
 OBJS	:= dlinfo.o dlpart.o dlcommon.o dlscrolling.o dlbuffer.o \
 	   dllist.o dlssl.o err_handler.o
 CFLAGS	:= -Wall -lpthread -lcurl
@@ -23,6 +23,8 @@ bcmp: bcmp.c $(OBJS)
 bsearch: bsearch.c $(OBJS)
 	$(CC) -o $@ $^ $(CFLAGS)
 repair: repair.c $(OBJS)
+	$(CC) -o $@ $^ $(CFLAGS)
+bdpandl-decode: bdpandl-decode.c $(OBJS)
 	$(CC) -o $@ $^ $(CFLAGS)
 
 .PHONY: ALL debug clean install uninstall

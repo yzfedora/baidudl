@@ -47,12 +47,20 @@ MiB.
 5. Linux, Unix-like, OSX supports, maybe Windows also.
 
 
-# Install
+# Compile
 	$ git clone https://github.com/yzfedora/baidudl.git
 	$ cd baidudl
 	$ ./autogen.sh
 	$ make
 	$ sudo make install
+
+# Install
+	if you don't want to compile manually, I have built a rpm package for
+	you. please go to subdirectory "packages/rpms", then you will find it.
+
+	$ git clone https://github.com/yzfedora/baidudl.git
+	$ cd baidudl/packages/rpms
+	$ sudo rpm -ivh baidudl-1.0-1.x86_64.rpm
 
 # Usage
 	download from a single url:
