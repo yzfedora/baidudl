@@ -532,13 +532,13 @@ static int dlinfo_get_strnum(int curr)
 	int nstr = 0;
 
 	if (curr < 10)
-		nstr += 1;
+		nstr = 1;
 	else if (curr < 100)
-		nstr += 2;
+		nstr = 2;
 	else if (curr < 1000)
-		nstr += 3;
+		nstr = 3;
 	else
-		nstr += 4;
+		nstr = 4;
 
 	return nstr;
 }
@@ -548,7 +548,11 @@ static void dlinfo_sigalrm_handler(int signo)
 	struct dlinfo *dl = dllist_get();
 	double speed = dl->di_bps;
 	int curr = dl->di_nthreads_curr;
+	char *underline_on = "\e[4m";
+	char *underline_off = "\e[24m";
 
+	if (!dl->di_recovery)
+		underline_on = "";
 
 	dlscrolling_setsize(dl->di_wincsz - DI_PROMPT_RESERVED - dlinfo_get_strnum(curr));
 	dlinfo_prompt_update(dl);
@@ -556,14 +560,14 @@ static void dlinfo_sigalrm_handler(int signo)
 
 	speed /= 1024;
 	if (speed < 1024) {
-		printf("\r\e[48;5;161m\e[30m%s %s%%  %4.3g%s/s  %8s  [%d]\e[0m",
-		       dl->di_prompt, dlinfo_get_percentage(dl), speed, "KiB",
-		       dlinfo_get_estimate(dl), curr);
+		printf("\r\e[48;5;161m\e[30m%s %s%s%%%s  %4.3g%s/s  %8s  [%d]\e[0m",
+		       dl->di_prompt, underline_on, dlinfo_get_percentage(dl),
+		       underline_off, speed, "KiB", dlinfo_get_estimate(dl), curr);
 	} else {
 		speed /= 1024;
-		printf("\r\e[48;5;161m\e[30m%s %s%%  %4.3g%s/s  %8s  [%d]\e[0m",
-		       dl->di_prompt, dlinfo_get_percentage(dl),
-		       speed, "MiB", dlinfo_get_estimate(dl),
+		printf("\r\e[48;5;161m\e[30m%s %s%s%%%s  %4.3g%s/s  %8s  [%d]\e[0m",
+		       dl->di_prompt, underline_on, dlinfo_get_percentage(dl),
+		       underline_off, speed, "MiB", dlinfo_get_estimate(dl),
 		       curr);
 	}
 
