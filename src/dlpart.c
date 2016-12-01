@@ -84,6 +84,7 @@ static void dlpart_write(struct dlpart *dp)
 
 
 	dlpart_update(dp);
+	dlbuffer_set_offset(dp->dp_buf, 0);
 }
 
 static size_t dlpart_http_header_callback(char *buf,
@@ -133,10 +134,8 @@ static size_t dlpart_write_callback(char *buf,
 	 * to make the IO as fast as possible, we use dlbuffer APIs to cache
 	 * the data, and write to disk when cached more than 1MiB bytes.
 	 */
-	if (dlbuffer_get_offset(dp->dp_buf) > DLPART_CACHE_SIZE) {
+	if (dlbuffer_get_offset(dp->dp_buf) > (dl->di_bps * 60 / dl->di_nthreads))
 		dlpart_write(dp);
-		dlbuffer_set_offset(dp->dp_buf, 0);
-	}
 
 	return len;
 }

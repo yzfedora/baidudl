@@ -335,7 +335,7 @@ static ssize_t dlinfo_records_recovery_all(struct dlinfo *dl)
 	ssize_t start;
 	ssize_t end;
 	ssize_t nedl = 0;
-	struct dlthreads **dt = &dl->di_threads;
+	struct dlthread **dt = &dl->di_threads;
 	struct args *args = NULL;
 
 	if (dlinfo_records_recovery_nthreads(dl) == -1)
@@ -662,7 +662,7 @@ static int dlinfo_range_generator(struct dlinfo *dl)
 	ssize_t size = dl->di_length / dl->di_nthreads;
 	ssize_t start;
 	ssize_t end;
-	struct dlthreads **dt = &dl->di_threads;
+	struct dlthread **dt = &dl->di_threads;
 	struct args *args = NULL;
 
 	for (i = 0; i < dl->di_nthreads; i++) {
@@ -700,7 +700,7 @@ static int dlinfo_range_generator(struct dlinfo *dl)
 void dlinfo_launch(struct dlinfo *dl)
 {
 	int s;
-	struct dlthreads *dt;
+	struct dlthread *dt;
 
 	/* 
 	 * Before we create threads to start download, we set the download
@@ -776,7 +776,7 @@ try_ignore_records_again:
 
 void dlinfo_delete(struct dlinfo *dl)
 {
-	struct dlthreads *dt = dl->di_threads, *tmp;
+	struct dlthread *dt = dl->di_threads, *tmp;
 
 	curl_global_cleanup();
 	pthread_mutex_destroy(&dl->di_mutex);

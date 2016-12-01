@@ -27,10 +27,10 @@
 #define DI_PROMPT_RESERVED	45
 #define DI_TRY_TIMES_MAX	7
 
-struct dlthreads {
+struct dlthread {
 	pthread_t		thread;
 	struct dlpart		*dp;
-	struct dlthreads	*next;
+	struct dlthread	*next;
 };
 
 /* Used to packet following parameters into a structure. */
@@ -67,7 +67,7 @@ struct dlinfo {
 
 	pthread_mutex_t	di_mutex;
 
-	struct dlthreads	*di_threads;
+	struct dlthread		*di_threads;
 	struct dlbuffer		*di_buffer;	/* used to cache header */
 
 	void (*nthreads_inc)(struct dlinfo *);
