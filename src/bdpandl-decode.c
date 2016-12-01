@@ -3,7 +3,7 @@
 
 #define ENCODE_NAME_MAX	4096
 
-char *string_decode(char *src)
+char *dlcom_string_decode(char *src)
 {
 	char tmp[ENCODE_NAME_MAX];
 	char *s = src;
@@ -47,6 +47,6 @@ int main(int argc, char *argv[])
 		fprintf(stderr, "bdpandl-decode <Decode-String>\n");
 		return 1;
 	}
-	printf("%s\n", string_decode(argv[1]));
+	printf("%s\n", dlcom_string_decode(argv[1]));
 	return 0;
 }

@@ -17,11 +17,12 @@
 #define _DLCOMMON_H
 #include "dlinfo.h"
 
-int getrcode(char *s);
-int url_is_http(const char *url);
-void get_filename_from_url(struct dlinfo *dl);
-int getwcol(void);
-ssize_t writen(int fd, const void *buf, size_t count);
-char *string_decode(char *src);
-char *dlstrcasestr(const char *haystack, const char *needle);
+int dlcom_get_http_response_code(char *s);
+int dlcom_url_is_http(const char *url);
+void dlcom_get_filename_from_url(struct dlinfo *dl);
+int dlcom_get_terminal_width(void);
+ssize_t dlcom_writen(int fd, const void *buf, size_t count);
+char *dlcom_string_decode(char *src);
+char *dlcom_strcasestr(const char *haystack, const char *needle);
+int dlcom_http_response_code_is_valid(struct dlinfo *dl, int rc);
 #endif

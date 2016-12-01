@@ -98,9 +98,12 @@ static size_t dlpart_http_header_callback(char *buf,
 		return 0;
 
 	if (!strcmp(buf, "\r\n")) {
-		int rc = getrcode(dlbuffer_get_buffer(dp->dp_buf));
-		if (rc != 200 && rc != 206)
+		dlbuffer_get_buffer(dp->dp_buf)[dlbuffer_get_offset(dp->dp_buf)] = 0;
+		int rc = dlcom_get_http_response_code(dlbuffer_get_buffer(dp->dp_buf));
+		if (!dlcom_http_response_code_is_valid(dp->dp_info, rc)) {
+			err_dbg(2, "remote server may not supports multithreading download");
 			dp->dp_ready = 0;
+		}
 
 		dlbuffer_set_offset(dp->dp_buf, 0);
 	}
@@ -168,7 +171,7 @@ static int dlpart_launch(struct dlpart *dp)
 	CURLcode rc;
 
 	dlpart_curl_setup(dp);
-	if ((rc = curl_easy_perform(dp->dp_curl))) {
+	if ((rc = curl_easy_perform(dp->dp_curl)) && rc != CURLE_WRITE_ERROR) {
 		err_dbg(2, "curl_easy_perform: %s", curl_easy_strerror(rc));
 		goto out;
 	}

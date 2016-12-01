@@ -25,7 +25,7 @@
 
 
 /* Get the return code. used to checking validity. */
-int getrcode(char *s)
+int dlcom_get_http_response_code(char *s)
 {
 	char *p, *ep;
 	int code;
@@ -38,7 +38,7 @@ int getrcode(char *s)
 	return -1;
 }
 
-int url_is_http(const char *url)
+int dlcom_url_is_http(const char *url)
 {
 	if (!strncmp(url, "http://", 7) ||
 	    !strncmp(url, "https://", 8) ||
@@ -48,7 +48,7 @@ int url_is_http(const char *url)
 	return 0;
 }
 
-void get_filename_from_url(struct dlinfo *dl)
+void dlcom_get_filename_from_url(struct dlinfo *dl)
 {
 	char *p;
 	char tmp[DI_ENC_NAME_MAX];
@@ -59,11 +59,11 @@ void get_filename_from_url(struct dlinfo *dl)
 		strncpy(tmp, dl->di_url, sizeof(tmp) - 1);
 
 	tmp[DI_ENC_NAME_MAX - 1] = 0;
-	strncpy(dl->di_filename, string_decode(tmp),
+	strncpy(dl->di_filename, dlcom_string_decode(tmp),
 		sizeof(dl->di_filename) - 1);
 }
 
-int getwcol(void)
+int dlcom_get_terminal_width(void)
 {
 	struct winsize size;
 
@@ -72,7 +72,7 @@ int getwcol(void)
 	return size.ws_col;
 }
 
-ssize_t writen(int fd, const void *buf, size_t count)
+ssize_t dlcom_writen(int fd, const void *buf, size_t count)
 {
 	int nwrt;
 	const char *ptr = buf;
@@ -88,7 +88,7 @@ ssize_t writen(int fd, const void *buf, size_t count)
 		} else {
 			if (errno == EINTR)
 				continue;
-			err_exit("writen");
+			err_exit("dlcom_writen");
 		}
 	}
 	return count;
@@ -97,7 +97,7 @@ ssize_t writen(int fd, const void *buf, size_t count)
 /*
  * Used to decode the filename string ''
  */
-char *string_decode(char *src)
+char *dlcom_string_decode(char *src)
 {
 	char tmp[DI_ENC_NAME_MAX];
 	char *s = src;
@@ -135,7 +135,7 @@ char *string_decode(char *src)
 	return s;
 }
 
-char *dlstrcasestr(const char *haystack, const char *needle)
+char *dlcom_strcasestr(const char *haystack, const char *needle)
 {
 	size_t i;
 	size_t haystack_buflen = strlen(haystack) + 1;
@@ -157,4 +157,15 @@ char *dlstrcasestr(const char *haystack, const char *needle)
 		return NULL;
 
 	return (char *)haystack + (needle_ptr - haystack_buf);
+}
+
+int dlcom_http_response_code_is_valid(struct dlinfo *dl, int rc)
+{
+	if (dl->di_url_is_http) {
+		if ((dl->di_nthreads == 1 && rc != 200) ||
+		    (dl->di_nthreads > 1 && rc != 206))
+		return 0;
+	}
+
+	return 1;
 }

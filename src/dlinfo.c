@@ -114,7 +114,6 @@ static void dlinfo_args_unpack(struct args *args,
  */
 static int dlinfo_http_header_parsing_all(struct dlinfo *dl, char *header_buf)
 {
-	int code;
 	char tmp[DI_ENC_NAME_MAX];
 	char *p;
 
@@ -122,14 +121,12 @@ static int dlinfo_http_header_parsing_all(struct dlinfo *dl, char *header_buf)
 						"%s\n", header_buf);
 
 	if (dl->di_url_is_http) {
-		code = getrcode(header_buf);
-		if (code < 200 || code >= 300) {
+		if (dlcom_get_http_response_code(header_buf) != 200)
 			return -1;
-		}
 	}
 
 #define HEADER_CONTENT_LENGTH "Content-Length: "
-	if ((p = dlstrcasestr(header_buf, HEADER_CONTENT_LENGTH))) {
+	if ((p = dlcom_strcasestr(header_buf, HEADER_CONTENT_LENGTH))) {
 		dl->di_length = strtol(p + sizeof(HEADER_CONTENT_LENGTH) - 1,
 				       NULL, 10);
 		if (dl->di_length <= 0)
@@ -141,17 +138,17 @@ static int dlinfo_http_header_parsing_all(struct dlinfo *dl, char *header_buf)
 		return 0;
 
 #define HEADER_FILENAME "filename="
-	if ((p = dlstrcasestr(header_buf, HEADER_FILENAME))) {
+	if ((p = dlcom_strcasestr(header_buf, HEADER_FILENAME))) {
 		p = memccpy(tmp, p + sizeof(HEADER_FILENAME) - 1, '\n',
 				DI_ENC_NAME_MAX);
 		if (!p) {
 			err_sys("memccpy");
 			return -1;
 		}
-		strncpy(dl->di_filename, string_decode(tmp),
+		strncpy(dl->di_filename, dlcom_string_decode(tmp),
 			sizeof(dl->di_filename) - 1);
 	} else {
-		get_filename_from_url(dl);
+		dlcom_get_filename_from_url(dl);
 	}
 
 	return 0;
@@ -271,7 +268,7 @@ static int dlinfo_init(struct dlinfo *dl)
 		}
 
 		dl->di_length = length;
-		get_filename_from_url(dl);
+		dlcom_get_filename_from_url(dl);
 	}
 
 	if (!dl->di_filename[0] || dl->di_length <= 0)
@@ -466,7 +463,7 @@ static char *dlinfo_prompt_set(struct dlinfo *dl)
 
 	dl->di_sig_cnt = 0;
 
-	dl->di_wincsz = getwcol();	/* initialize window column. */
+	dl->di_wincsz = dlcom_get_terminal_width();	/* initialize window column. */
 
 	/*
 	 * Initial roll displayed string, and expect maximum length.
@@ -576,7 +573,7 @@ static void dlinfo_sigalrm_handler(int signo)
 static void dlinfo_sigwinch_handler(int signo)
 {
 	struct dlinfo *dl = dllist_get();
-	dl->di_wincsz = getwcol();
+	dl->di_wincsz = dlcom_get_terminal_width();
 }
 
 static void dlinfo_register_signal_handler(void)
@@ -636,7 +633,7 @@ static void *dlinfo_download(void *arg)
 	dlinfo_args_unpack((struct args *)arg, &dl, &dp,
 			   &start, &end, &no);
 
-	err_dbg(1, "\nthread %d starting to download range: %ld-%ld\n",
+	err_dbg(1, "thread %d starting to download range: %ld-%ld",
 						no, start, end);
 
 	dl->nthreads_inc(dl);
@@ -856,7 +853,7 @@ struct dlinfo *dlinfo_new(char *url, char *filename, int nthreads)
 	if (filename)
 		strcpy(dl->di_filename, filename);
 
-	dl->di_url_is_http = url_is_http(dl->di_url);
+	dl->di_url_is_http = dlcom_url_is_http(dl->di_url);
 	dl->di_nthreads = nthreads;
 
 	dl->nthreads_inc = dlinfo_nthreads_running_inc;

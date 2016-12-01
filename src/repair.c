@@ -52,7 +52,7 @@ static void repair_write_nthreads(int fd, int nthreads)
 	repair_seek(fd, 0, SEEK_END);
 	printf("Write number of threads(%d) to offest %ld ...\n",
 				nthreads, repair_get_offset(fd));
-	writen(fd, &nthreads, sizeof(nthreads));
+	dlcom_writen(fd, &nthreads, sizeof(nthreads));
 }
 
 static void repair_write_range(int fd, size_t start, size_t end)
@@ -60,8 +60,8 @@ static void repair_write_range(int fd, size_t start, size_t end)
 	repair_seek(fd, 0, SEEK_END);
 	printf("Write range %ld-%ld to offest %ld ...\n", start, end,
 				repair_get_offset(fd));
-	writen(fd, &start, sizeof(start));
-	writen(fd, &end, sizeof(end));
+	dlcom_writen(fd, &start, sizeof(start));
+	dlcom_writen(fd, &end, sizeof(end));
 }
 
 static void repair_doit(int fd, struct repair_range *range, int range_cnt)

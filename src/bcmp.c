@@ -84,7 +84,7 @@ static ssize_t readn(int fd, void *buf, size_t count)
 	return count;
 }
 
-static ssize_t writen(int fd, const void *buf, size_t count)
+static ssize_t dlcom_writen(int fd, const void *buf, size_t count)
 {
 	int nwrt;
 	const char *ptr = buf;
@@ -100,7 +100,7 @@ static ssize_t writen(int fd, const void *buf, size_t count)
 		} else {
 			if (errno == EINTR)
 				continue;
-			err_sys("writen");
+			err_sys("dlcom_writen");
 			return -1;
 		}
 	}
@@ -201,7 +201,7 @@ static void binsave(int fd, const char *file)
 	while ((nread = readn(fd, buf, sizeof(buf))) > 0 && length > 0) {
 		if (nread > length)
 			nread = length;
-		if (writen(fd_save, buf, nread) <= 0) {
+		if (dlcom_writen(fd_save, buf, nread) <= 0) {
 			break;
 		}
 		length -= nread;
