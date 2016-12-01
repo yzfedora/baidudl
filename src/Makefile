@@ -24,7 +24,7 @@ bsearch: bsearch.c $(OBJS)
 	$(CC) -o $@ $^ $(CFLAGS)
 repair: repair.c $(OBJS)
 	$(CC) -o $@ $^ $(CFLAGS)
-bdpandl-decode: bdpandl-decode.c $(OBJS)
+bdpandl-decode: bdpandl-decode.c
 	$(CC) -o $@ $^ $(CFLAGS)
 
 .PHONY: ALL debug clean install uninstall
