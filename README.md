@@ -55,15 +55,20 @@ MiB.
 	$ sudo make install
 
 # Install
-	if you don't want to compile manually, I have built the package for
-	you. please go to subdirectory "packages", then you will find it.
+	if you don't want to compile manually, the pre-compiled packages were
+	provided, please go to subdirectory "packages", then you will find it.
 
 	$ git clone https://github.com/yzfedora/baidudl.git
 
-	For RPM system:
+	For RPM systems:
 
 	$ cd baidudl/packages/rpms
 	$ sudo [yum | dnf] install baidudl-1.0-1.x86_64.rpm
+
+	For Debian/Ubuntu systems:
+
+	$ cd baidudl/packages/debs
+	$ sudo dpkg -i baidudl_1.0-1_amd64.deb
 
 # Usage
 	download from a single url:
