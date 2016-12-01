@@ -546,7 +546,7 @@ static int dlinfo_get_strnum(int curr)
 static void dlinfo_sigalrm_handler(int signo)
 {
 	struct dlinfo *dl = dllist_get();
-	ssize_t speed = dl->di_bps;
+	double speed = dl->di_bps;
 	int curr = dl->di_nthreads_curr;
 
 
@@ -554,15 +554,16 @@ static void dlinfo_sigalrm_handler(int signo)
 	dlinfo_prompt_update(dl);
 	printf("\r" "%*s", dl->di_wincsz, "");
 
-	speed >>= 10;
-	if (speed < 1000) {
-		printf("\r\e[48;5;161m\e[30m%s %s%%  %4ld%s/s  %8s  [%d]\e[0m",
-		       dl->di_prompt, dlinfo_get_percentage(dl), (long)speed, "KiB",
+	speed /= 1024;
+	if (speed < 1024) {
+		printf("\r\e[48;5;161m\e[30m%s %s%%  %4.3g%s/s  %8s  [%d]\e[0m",
+		       dl->di_prompt, dlinfo_get_percentage(dl), speed, "KiB",
 		       dlinfo_get_estimate(dl), curr);
-	} else if (speed > 1000) {
+	} else {
+		speed /= 1024;
 		printf("\r\e[48;5;161m\e[30m%s %s%%  %4.3g%s/s  %8s  [%d]\e[0m",
 		       dl->di_prompt, dlinfo_get_percentage(dl),
-		       (long)speed / 1000.0, "MiB", dlinfo_get_estimate(dl),
+		       speed, "MiB", dlinfo_get_estimate(dl),
 		       curr);
 	}
 
