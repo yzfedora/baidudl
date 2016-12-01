@@ -38,16 +38,26 @@ MiB.
 3. use -f option to download from file. -l option is deprecated.
 4. use internal cache mechanism to optimize the IO speed.
 5. change the default threads number to 100.
+6. add underline as indicator to indicates are we recvory the download
+   from previous file or not.
+7. adjust buffer size dynamically supports. all buffers memory will be
+   write to disk for every minute(60 second default).
 
 # Features
 1. multithreading download, number of threads depending on server.
 2. continues download, supports restore download from a previous file.
 3. http, https, ftp protocol supports. (axel is great, but no https supports)
 4. graceful status bar.
-5. Linux, Unix-like, OSX supports, maybe Windows also.
+5. Linux, Unix-like, OSX supports, (still no time to port it to windows,
+   mainly, use windows native threads supports to replace Linux's pthread).
 
 
 # Compile
+	if you want to use the latest version program, maybe you should
+	try compile it. the pre-compiled packages are provided also. but,
+	I can not make sure it's latest version. because the latest code
+	on repository may not stable.
+	
 	$ git clone https://github.com/yzfedora/baidudl.git
 	$ cd baidudl
 	$ ./autogen.sh
