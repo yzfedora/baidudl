@@ -67,6 +67,9 @@ static void dlpart_write(struct dlpart *dp)
 	int n, len = dlbuffer_get_offset(dp->dp_buf);
 	char *buf = dlbuffer_get_buffer(dp->dp_buf);
 
+	if (len <= 0)
+		return;
+
 	while (len > 0) {
 		n = pwrite(dp->dp_info->di_local, buf, len, dp->dp_start);
 		if (n > 0) {
@@ -134,7 +137,7 @@ static size_t dlpart_write_callback(char *buf,
 	 * to make the IO as fast as possible, we use dlbuffer APIs to cache
 	 * the data, and write to disk when cached more than 1MiB bytes.
 	 */
-	if (dlbuffer_get_offset(dp->dp_buf) > (dl->di_bps * 60 / dl->di_nthreads))
+	if (dlbuffer_get_offset(dp->dp_buf) > (dl->di_bps_last * 60 / dl->di_nthreads))
 		dlpart_write(dp);
 
 	return len;
