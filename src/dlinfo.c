@@ -487,6 +487,34 @@ static void dlinfo_prompt_update(struct dlinfo *dl)
 }
 
 /*
+ * Use a beatiful style to convert speed in bytes to suitable unit.
+ */
+#define DI_SPEED_STR_MAX	32
+static char *dlinfo_get_speed(struct dlinfo *dl,
+			      char *sbuf, size_t sbuf_len,
+			      char **unit)
+{
+	double speed = dl->di_bps;
+	int k = 0, unit_idx = 0;
+	static char *units[] = { "KiB", "MiB", "GiB", "TiB"};
+
+	speed /= 1000;
+	while (speed >= 1000 && unit_idx < (sizeof(units) / sizeof(units[0]))) {
+		speed /= 1000;
+		unit_idx++;
+	}
+
+	if (speed < 10)
+		k = 2;
+	else if (speed < 100)
+		k = 1;
+
+	*unit = units[unit_idx];
+	snprintf(sbuf, sbuf_len, "%4.*f", k, speed);
+	return sbuf;
+}
+
+/*
  * To prevent the round up of snprintf().
  * example:
  * 	99.97 may be round up to 100.0
@@ -497,7 +525,7 @@ static char *dlinfo_get_percentage(struct dlinfo *dl)
 	int len;
 	static char percentage_str[DI_PERCENTAGE_STR_MAX];
 
-	len = snprintf(percentage_str, sizeof(percentage_str), "%6.2f",
+	len = snprintf(percentage_str, sizeof(percentage_str), "%6.3f",
 			(double)dl->di_total_read / dl->di_total * 100);
 
 	percentage_str[len - 1] = 0;        /* prevent snprintf round up */
@@ -546,10 +574,11 @@ static int dlinfo_get_strnum(int curr)
 static void dlinfo_sigalrm_handler(int signo)
 {
 	struct dlinfo *dl = dllist_get();
-	double speed = dl->di_bps;
 	int curr = dl->di_nthreads_curr;
 	char *underline_on = "\e[4m";
 	char *underline_off = "\e[24m";
+	char speed[DI_SPEED_STR_MAX];
+	char *unit = NULL;
 
 	if (!dl->di_recovery)
 		underline_on = "";
@@ -558,18 +587,10 @@ static void dlinfo_sigalrm_handler(int signo)
 	dlinfo_prompt_update(dl);
 	printf("\r" "%*s", dl->di_wincsz, "");
 
-	speed /= 1024;
-	if (speed < 1024) {
-		printf("\r\e[48;5;161m\e[30m%s %s%s%%%s  %4.3g%s/s  %8s  [%d]\e[0m",
-		       dl->di_prompt, underline_on, dlinfo_get_percentage(dl),
-		       underline_off, speed, "KiB", dlinfo_get_estimate(dl), curr);
-	} else {
-		speed /= 1024;
-		printf("\r\e[48;5;161m\e[30m%s %s%s%%%s  %4.3g%s/s  %8s  [%d]\e[0m",
-		       dl->di_prompt, underline_on, dlinfo_get_percentage(dl),
-		       underline_off, speed, "MiB", dlinfo_get_estimate(dl),
-		       curr);
-	}
+	dlinfo_get_speed(dl, speed, sizeof(speed), &unit);
+	printf("\r\e[48;5;161m\e[30m%s %s%s%%%s  %s%s/s  %8s  [%d]\e[0m",
+	       dl->di_prompt, underline_on, dlinfo_get_percentage(dl),
+	       underline_off, speed, unit, dlinfo_get_estimate(dl), curr);
 
 	fflush(stdout);
 	dl->bps_reset(dl);
