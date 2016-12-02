@@ -1,9 +1,6 @@
 # baidudl
 This is a multi-thread download tool for linux, mainly used to download large
-file from pan.baidu.com, since pan.baidu.com has changed their server to use
-https instead of http, and also they are using https 302 redirect, this caused
-our program can't resolve the correct download url. and I just fix it today :-)
-
+file from pan.baidu.com.
 百度网盘多线程下载工具, 支持协议http, https, ftp, 支持平台Linux, Unix-Like,
 OSX, 支持断点续传.
 
@@ -14,9 +11,7 @@ if you find the download speed become very slow, even smaller than 100
 KiB/s, you can type Ctrl-C first to stop it. and restore again. and don't
 forget to use "-n" option to specify use how many number of threads to
 download, normally, I use set it to 100 or 200 according the situation.
-but, please be care, for every threads, the program will use at least 1 MiB
-to cache. so default memory usage will be 100 threads x 1 MiB per thread = 100
-MiB.
+
 
 # Bugs
 1. there is a bug in pan.baidu.com, especially when try specify a batch
@@ -41,8 +36,8 @@ MiB.
 6. add underline as indicator to indicates are we recvory the download
    from previous file or not.
 7. adjust buffer size dynamically supports. all buffers memory will be
-   write to disk for every minute(60 second default).
-
+   write to disk for every minute(60 second default).
+   
 # Features
 1. multithreading download, number of threads depending on server.
 2. continues download, supports restore download from a previous file.
