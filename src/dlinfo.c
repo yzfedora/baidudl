@@ -494,11 +494,13 @@ static char *dlinfo_get_speed(struct dlinfo *dl,
 			      char *sbuf, size_t sbuf_len,
 			      char **unit)
 {
-	double speed = dl->di_bps;
+	double speed;
 	int k = 0, unit_idx = 0;
 	static char *units[] = { "KiB", "MiB", "GiB", "TiB"};
 
-	speed /= 1000;
+	dl->di_bps_last = dl->di_bps_last * 0.75 + dl->di_bps * 0.25;
+	speed = dl->di_bps_last / 1000;		/* KiB default */
+
 	while (speed >= 1000 && unit_idx < (sizeof(units) / sizeof(units[0]))) {
 		speed /= 1000;
 		unit_idx++;
@@ -539,7 +541,7 @@ static char *dlinfo_get_estimate(struct dlinfo *dl)
 	static char estimate_str[DI_ESTIMATE_STR_MAX];
 
 	secs = (dl->di_total - dl->di_total_read) /
-	       ((dl->di_bps > 0) ? dl->di_bps : 1024);
+	       ((dl->di_bps_last > 0) ? dl->di_bps_last : 1024);
 
 	hours = secs / 3600;
 	secs = secs % 3600;

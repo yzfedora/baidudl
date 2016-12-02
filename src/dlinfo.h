@@ -59,6 +59,7 @@ struct dlinfo {
 	size_t	di_total;		/* length of file */
 	size_t	di_total_read;		/* total read(received) bytes */
 	size_t	di_bps;			/* bytes per second, speed */
+	size_t	di_bps_last;		/* last second speed */
 
 
 	int	di_url_is_http;		/* use to check HTTP or HTTPS code */
