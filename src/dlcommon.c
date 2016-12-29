@@ -173,7 +173,7 @@ char *dlcom_strcasestr(const char *haystack, const char *needle)
 int dlcom_http_response_code_is_valid(struct dlinfo *dl, int rc)
 {
 	if (dl->di_url_is_http) {
-		if ((dl->di_nthreads == 1 && rc != 200) ||
+		if ((dl->di_nthreads == 1 && rc != 200 && rc != 206) ||
 		    (dl->di_nthreads > 1 && rc != 206))
 		return 0;
 	}
