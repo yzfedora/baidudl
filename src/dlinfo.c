@@ -24,9 +24,7 @@
 #include <pthread.h>
 #include <sys/fcntl.h>
 #include <sys/stat.h>
-#include <sys/socket.h>
 #include <sys/time.h>
-#include <netdb.h>
 #include <errno.h>
 #include <curl/curl.h>
 
@@ -357,14 +355,14 @@ static ssize_t dlinfo_records_recovery_all(struct dlinfo *dl)
 		dlinfo_records_recovery(dl, &start, sizeof(start));
 		dlinfo_records_recovery(dl, &end, sizeof(end));
 		if (start > end) {
-			/* 
+			/*
 			 * if this range is finished, set 'dt->thread' and
 			 * 'dt->dp both to 0 or NULL properly'.
 			 */
 			if (start != end + 1)
 				err_exit("recovery error range: %ld-%ld\n",
-					 start, end);
-			/* 
+					 (long)start, (long)end);
+			/*
 			 * Set members of *dt to 0 or NULL. subtract 1 for
 			 * finished part.
 			 */
@@ -463,7 +461,10 @@ static char *dlinfo_prompt_set(struct dlinfo *dl)
 
 	dl->di_sig_cnt = 0;
 
+#if defined(__linux__) || defined(__unix__) || \
+	(defined(__APPLE__) && defined(__MACH__))
 	dl->di_wincsz = dlcom_get_terminal_width();	/* initialize window column. */
+#endif
 
 	/*
 	 * Initial roll displayed string, and expect maximum length.
@@ -590,13 +591,16 @@ static void dlinfo_sigalrm_handler(int signo)
 	printf("\r" "%*s", dl->di_wincsz, "");
 
 	dlinfo_get_speed(dl, speed, sizeof(speed), &unit);
-	printf("\r\e[48;5;161m\e[30m%s %s%s%%%s  %s%s/s  %8s  [%d]\e[0m",
+	printf("\r\e[48;5;161m\e[30m%s %s%6s%%%s  %s%s/s  %8s  [%d]\e[0m",
 	       dl->di_prompt, underline_on, dlinfo_get_percentage(dl),
 	       underline_off, speed, unit, dlinfo_get_estimate(dl), curr);
 
 	fflush(stdout);
 	dl->bps_reset(dl);
 }
+
+#if defined(__linux__) || defined(__unix__) || \
+	(defined(__APPLE__) && defined(__MACH__))
 
 static void dlinfo_sigwinch_handler(int signo)
 {
@@ -612,7 +616,7 @@ static void dlinfo_register_signal_handler(void)
 	act.sa_flags |= SA_RESTART;
 	act.sa_handler = dlinfo_sigalrm_handler;
 
-	/* 
+	/*
 	 * Register the SIGALRM handler, for print the progress of download.
 	 */
 	if (sigaction(SIGALRM, &act, &old) == -1)
@@ -628,15 +632,17 @@ static void dlinfo_register_signal_handler(void)
 }
 
 
-static void dlinfo_sigalrm_detach(void)
+static void dlinfo_sigalrm_detach(struct dlinfo *dl)
 {
 	if (setitimer(ITIMER_REAL, NULL, NULL) == -1)
 		err_sys("setitimer");
 }
 
-static void dlinfo_alarm_launch(void)
+static void dlinfo_alarm_launch(struct dlinfo *dl)
 {
 	struct itimerval new;
+
+	dlinfo_register_signal_handler();
 
 	new.it_interval.tv_sec = 1;
 	new.it_interval.tv_usec = 0;
@@ -646,6 +652,20 @@ static void dlinfo_alarm_launch(void)
 	if (setitimer(ITIMER_REAL, &new, NULL) == -1)
 		err_sys("setitimer");
 }
+
+#elif defined(_WIN32)
+
+#define DI_SIGALRM_TIMER_ID	0x1
+static void CALLBACK dlinfo_alarm_timer_callback(HWND hwnd, UINT msg, UINT_PTR id, DWORD time)
+{
+	dlinfo_sigalrm_handler(0);
+}
+
+static void dlinfo_alarm_launch(struct dlinfo *dl)
+{
+	SetTimer(NULL, DI_SIGALRM_TIMER_ID, 1000, dlinfo_alarm_timer_callback);
+}
+#endif
 
 /*
  * Use this thread to download partial data.
@@ -662,13 +682,13 @@ static void *dlinfo_download(void *arg)
 			   &start, &end, &no);
 
 	err_dbg(1, "thread %d starting to download range: %ld-%ld",
-						no, start, end);
+		no, (long)start, (long)end);
 
 	dl->nthreads_inc(dl);
 	while (start < end) {
 		if (!(*dp = dlpart_new(dl, start, end, no))) {
 			err_msg("thread %d failed to download range: %ld-%ld",
-						no, start, end);
+				no, (long)start, (long)end);
 			break;
 		}
 
@@ -729,21 +749,20 @@ void dlinfo_launch(struct dlinfo *dl)
 	int s;
 	struct dlthread *dt;
 
-	/* 
+	/*
 	 * Before we create threads to start download, we set the download
 	 * prompt first. and set the alarm too.
 	 */
 	dlinfo_prompt_set(dl);
-	dlinfo_register_signal_handler();
-	dlinfo_alarm_launch();
+	dlinfo_alarm_launch(dl);
 
 launch:
-	/* 
+	/*
 	 * Set offset of the file to the start of records, and recovery
 	 * number of threads to dl->di_nthreads.
 	 */
 	if (dl->di_recovery) {
-		/* 
+		/*
 		 * if file has exist, and it's length is equal to bytes
 		 * which need download bytes. so it has download finished.
 		 */
@@ -775,12 +794,15 @@ launch:
 		dt = dt->next;
 	}
 
-	/* 
+	/*
 	 * Force the flush the output prompt, and clear the timer, and
 	 * removing the records which we written in the end of file.
 	 */
-	dlinfo_sigalrm_handler(SIGALRM);
-	dlinfo_sigalrm_detach();
+	dlinfo_sigalrm_handler(0);
+#if defined(__linux__) || defined(__unix__) || \
+	(defined(__APPLE__) && defined(__MACH__))
+	dlinfo_sigalrm_detach(dl);
+#endif
 	if (dl->di_total_read == dl->di_total)
 		dlinfo_records_removing(dl);
 	printf("\n");
@@ -912,7 +934,8 @@ struct dlinfo *dlinfo_new(char *url, char *filename, int nthreads)
 	 */
 	dllist_put(dl);
 
-	err_dbg(1, "filename=%s, length=%ld\n", dl->di_filename, dl->di_length);
+	err_dbg(1, "filename=%s, length=%ld\n", dl->di_filename,
+		(long)dl->di_length);
 	return dl;
 out:
 	dl->delete(dl);

@@ -16,7 +16,11 @@
 #ifndef _ERR_HANDLER_H
 #define _ERR_HANDLER_H
 #include <errno.h>
-#include <syslog.h>
+
+#if defined(__linux__) || defined(__unix__) || \
+	(defined(__APPLE__) && defined(__MACH__))
+# include <syslog.h>
+#endif
 
 /* #undef __GNUC__ */
 #ifdef __GNUC__

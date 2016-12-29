@@ -17,7 +17,15 @@
 #include <unistd.h>
 #include <stdlib.h>
 #include <string.h>
+
+#if defined(__linux__) || defined(__unix__) || \
+	(defined(__APPLE__) && defined(__MACH__))
 #include <sys/ioctl.h>
+#endif
+
+#if defined(_WIN32)
+#include <pthread.h>
+#endif
 
 #include "err_handler.h"
 #include "dlcommon.h"
@@ -63,6 +71,8 @@ void dlcom_get_filename_from_url(struct dlinfo *dl)
 		sizeof(dl->di_filename) - 1);
 }
 
+#if defined(__linux__) || defined(__unix__) || \
+	(defined(__APPLE__) && defined(__MACH__))
 int dlcom_get_terminal_width(void)
 {
 	struct winsize size;
@@ -71,6 +81,7 @@ int dlcom_get_terminal_width(void)
 		err_sys("ioctl get the window size");
 	return size.ws_col;
 }
+#endif
 
 ssize_t dlcom_writen(int fd, const void *buf, size_t count)
 {
@@ -169,3 +180,45 @@ int dlcom_http_response_code_is_valid(struct dlinfo *dl, int rc)
 
 	return 1;
 }
+
+#if defined(_WIN32)
+
+static pthread_mutex_t pread_lock = PTHREAD_MUTEX_INITIALIZER;
+static pthread_mutex_t pwrite_lock = PTHREAD_MUTEX_INITIALIZER;
+
+/*
+ * pread and pwrite implementation for windows. I think we should use lock
+ * to protect it. especially, in a multhreading environment.
+ */
+ssize_t pread(int fd, void *buf, size_t count, off_t offset)
+{
+	pthread_mutex_lock(&pread_lock);
+
+	ssize_t ret;
+	off_t saved_pos = lseek(fd, 0, SEEK_CUR);
+
+	lseek(fd, offset, SEEK_SET);
+	ret = read(fd, buf, count);
+	lseek(fd, saved_pos, SEEK_SET);
+
+	pthread_mutex_unlock(&pread_lock);
+
+	return ret;
+}
+
+ssize_t pwrite(int fd, const void *buf, size_t count, off_t offset)
+{
+	pthread_mutex_lock(&pwrite_lock);
+
+	ssize_t ret;
+	off_t saved_pos = lseek(fd, 0, SEEK_CUR);
+
+	lseek(fd, offset, SEEK_SET);
+	ret = write(fd, buf, count);
+	lseek(fd, saved_pos, SEEK_SET);
+
+	pthread_mutex_unlock(&pwrite_lock);
+
+	return ret;
+}
+#endif

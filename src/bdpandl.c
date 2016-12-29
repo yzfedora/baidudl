@@ -21,7 +21,6 @@
 #include <unistd.h>
 #include <signal.h>
 #include <pthread.h>
-#include <sys/socket.h>
 #include "err_handler.h"
 #include "dlinfo.h"
 
@@ -59,31 +58,24 @@ static void download_from_url(char *url, char *filename, int nts)
 static void download_from_file(const char *listfile, int nts)
 {
 #define CONFIG_LINE_MAX	4096
-	FILE *list;
-	char *lineptr = malloc(CONFIG_LINE_MAX);
-	size_t max = CONFIG_LINE_MAX;
-	ssize_t num = 0;
+	FILE *listfp;
+	char url[CONFIG_LINE_MAX];
 
-	if (!(list = fopen(listfile, "r")))
+	if (!(listfp = fopen(listfile, "r")))
 		err_exit("failed to open list file: %s", listfile);
 
-	while (1) {
-		errno = 0;	/* ensure no effects by other calls */
-		num = getline(&lineptr, &max, list);
-		if (num == -1) {
-			if (!errno)
-				break;	/* end-of-file */
-			continue;
-		}
-		if (lineptr[num - 1] == '\n')
-			lineptr[num - 1] = 0;
+	while (!feof(listfp)) {
+		if (!fgets(url, sizeof(url - 1), listfp))
+			break;
+
+		if (url[strlen(url) - 1] == '\n')
+			url[strlen(url) - 1] = 0;
 
 		/* when this call be down, try next to download */
-		download_from_url(lineptr, NULL, nts);
+		download_from_url(url, NULL, nts);
 	}
 
-	free(lineptr);
-	if (fclose(list))
+	if (fclose(listfp))
 		err_exit("failed to close list file: %s", listfile);
 }
 

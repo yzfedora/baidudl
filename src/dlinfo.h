@@ -19,12 +19,20 @@
 #include <limits.h>
 #include "dlpart.h"
 
+#if defined(_WIN32)
+#define NAME_MAX		FILENAME_MAX
+#endif
+
+#ifndef NAME_MAX
+#define NAME_MAX		256
+#endif
+
 #define DI_BUF_SZ		1024
 #define DI_URL_SZ		4096
 #define DI_NAME_MAX		(NAME_MAX + 1)
 #define DI_ENC_NAME_MAX		(NAME_MAX * 3 + 1)
 #define DI_PROMPT_SZ		1024
-#define DI_PROMPT_RESERVED	45
+#define DI_PROMPT_RESERVED	46
 #define DI_TRY_TIMES_MAX	7
 
 struct dlthread {

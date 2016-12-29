@@ -25,4 +25,10 @@ ssize_t dlcom_writen(int fd, const void *buf, size_t count);
 char *dlcom_string_decode(char *src);
 char *dlcom_strcasestr(const char *haystack, const char *needle);
 int dlcom_http_response_code_is_valid(struct dlinfo *dl, int rc);
+
+#if defined(_WIN32)
+ssize_t pread(int fd, void *buf, size_t count, off_t offset);
+ssize_t pwrite(int fd, const void *buf, size_t count, off_t offset);
+#endif
+
 #endif

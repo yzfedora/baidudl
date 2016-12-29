@@ -22,7 +22,6 @@
 #include <string.h>
 #include <pthread.h>
 #include <sys/time.h>
-#include <sys/select.h>
 #include <fcntl.h>
 #include <errno.h>
 
@@ -147,7 +146,8 @@ static int dlpart_curl_setup(struct dlpart *dp)
 {
 	char range[DLPART_BUFSZ];
 
-	snprintf(range, sizeof(range), "%ld-%ld", dp->dp_start, dp->dp_end);
+	snprintf(range, sizeof(range), "%ld-%ld", (long)dp->dp_start,
+		 (long)dp->dp_end);
 	curl_easy_setopt(dp->dp_curl, CURLOPT_RANGE, range);
 	curl_easy_setopt(dp->dp_curl, CURLOPT_URL, dp->dp_info->di_url);
 	curl_easy_setopt(dp->dp_curl, CURLOPT_FOLLOWLOCATION, 1);

@@ -22,7 +22,6 @@
 #include <signal.h>
 #include <stdarg.h>
 #include <string.h>
-#include <syslog.h>
 #include "err_handler.h"
 
 #ifdef	LIBERR_TEST
@@ -30,6 +29,12 @@
 # include <fcntl.h>
 #endif
 
+#if defined(_WIN32)
+#define LOG_ERR		0
+#define LOG_INFO	0
+#define LOG_DEBUG	0
+#define strerror_r(errno,buf,len) strerror_s(buf,len,errno)
+#endif
 
 #define ERR_BUFFER	4096
 #define COLOR_RST	"\e[0m"		/* Reset color of terminal. */
@@ -37,9 +42,9 @@
 
 
 #ifdef	LIBERR_TEST
-# define TEST_OUT	"test.out"
-# define TEST_SYM_TSTP	"#TSTP#"
-# define TEST_SYM_CONT	"#CONT#"
+#define TEST_OUT	"test.out"
+#define TEST_SYM_TSTP	"#TSTP#"
+#define TEST_SYM_CONT	"#CONT#"
 #endif
 
 #define call_err_internal(doexit, doerr, level, msg)		\
@@ -82,7 +87,9 @@ void err_setout(int fd)
 	_err_tty = isatty(STDERR_FILENO);
 }
 
-/* 
+#if defined(__linux__) || defined(__unix__) || \
+	(defined(__APPLE__) && defined(__MACH__))
+/*
  * Do some cleanup when program exit normally, this mean not killed by signal.
  */
 __attribute__((destructor(255))) void err_fini(void)
@@ -164,7 +171,7 @@ static void err_sigcont_handler(int signo)
 __attribute__((constructor(255))) void err_init(void)
 {
 	struct sigaction act, oact;
-	
+
 	_err_tty = isatty(STDERR_FILENO);
 	openlog(NULL, LOG_NDELAY | LOG_PID, LOG_USER);
 
@@ -183,7 +190,7 @@ __attribute__((constructor(255))) void err_init(void)
 		err_sys("liberr set signal handler for SIGSEGV error");
 	if (sigaction(SIGTERM, &act, &oact) == -1)
 		err_sys("liberr set signal handler for SIGTERM error");
-	
+
 	act.sa_handler = err_sigtstp_handler;
 	act.sa_flags = 0;
 	if (sigaction(SIGTSTP, &act, &oact) == -1)
@@ -192,6 +199,7 @@ __attribute__((constructor(255))) void err_init(void)
 	if (sigaction(SIGCONT, &act, &oact) == -1)
 		err_sys("liberr set signal handler for SIGCONT error");
 }
+#endif
 
 static void err_internal(bool doexit, bool doerr, int level,
 		const char *msg, va_list ap)
@@ -227,8 +235,11 @@ static void err_internal(bool doexit, bool doerr, int level,
 
 	if (!_err_daemon)
 		write(STDERR_FILENO, buf, len);
+#if defined(__linux__) || defined(__unix__) || \
+	(defined(__APPLE__) && defined(__MACH__))
 	else
 		syslog(level, buf, len);
+#endif
 
 	if (doexit)
 		exit(EXIT_FAILURE);
@@ -255,7 +266,7 @@ void err_sys(const char *msg, ...)
 void err_exit(const char *msg, ...)
 {
 	call_err_internal(true, true, LOG_ERR, msg);
-	/* 
+	/*
 	 * Force to tell compiler this is 'noreturn', because of in the macro
 	 * 'call_err_internal', the first argument 'doexit' is true.
 	 */
