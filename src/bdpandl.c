@@ -65,7 +65,7 @@ static void download_from_file(const char *listfile, int nts)
 		err_exit("failed to open list file: %s", listfile);
 
 	while (!feof(listfp)) {
-		if (!fgets(url, sizeof(url - 1), listfp))
+		if (!fgets(url, sizeof(url) - 1, listfp))
 			break;
 
 		if (url[strlen(url) - 1] == '\n')
@@ -85,7 +85,7 @@ int main(int argc, char *argv[])
 	char *filename = NULL;
 	char *listfile = NULL;	/* which stored the download list */
 
-	while ((opt = getopt(argc, argv, "d:n:o:l:h")) != -1) {
+	while ((opt = getopt(argc, argv, "d:n:o:f:h")) != -1) {
 		switch (opt) {
 		case 'd':
 			/*
