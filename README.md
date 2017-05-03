@@ -10,7 +10,7 @@ OSX, 支持断点续传.
 if you find the download speed become very slow, even smaller than 100
 KiB/s, you can type Ctrl-C first to stop it. and restore again. and don't
 forget to use "-n" option to specify use how many number of threads to
-download, normally, I use set it to 100 or 200 according the situation.
+download, normally, I set it to 100 or 200 according the situation.
 
 
 # Bugs
