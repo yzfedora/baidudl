@@ -4,6 +4,12 @@ file from pan.baidu.com.
 百度网盘多线程下载工具, 支持协议http, https, ftp, 支持平台Linux, Unix-Like,
 OSX, 支持断点续传.
 
+注意: 最近百度网盘的下载地址已经开始启用Cookies验证了, 也就是说从浏览器里面获得的下载地址
+下载的时候会返回403错误, 目前批量下载的地址还可以用，没有使用Cookies验证. 这个工具本身的
+目的是用于多线程下载。如果百度打算让所有下载连接都加上Cookies, 那么估计就只能用BaiduPCS
+之类的工具先登录再下载了。(但是很奇怪，BaiduPCS我用500线程只能达到2MB/s, 但是用bdpandl
+可以达到6MB/s). 
+
 ![image](https://github.com/yzfedora/baidudl/raw/master/demo.png)
 
 # Tips
