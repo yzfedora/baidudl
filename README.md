@@ -6,14 +6,10 @@ OSX, 支持断点续传.
 
 Hello everyone! After fixed the pan.baidu.com refuse wrong User-Agent request
 problem, welcome to enjoy the multi-threading based download acceleration experience.
+default is using 100 threads, use "-n num-threads" option to set the maximum number
+of threads to be used for download.
 
 ![image](https://github.com/yzfedora/baidudl/raw/master/demo.png)
-
-# Tips
-if you find the download speed become very slow, even smaller than 100
-KiB/s, you can type Ctrl-C first to stop it. and restore again. and don't
-forget to use "-n" option to specify use how many number of threads to
-download, normally, I set it to 100 or 200 according the situation.
 
 
 # Features
