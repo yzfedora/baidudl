@@ -934,7 +934,7 @@ struct dlinfo *dlinfo_new(char *url, char *filename, int nthreads)
 	 * and establish a temporary connection used to send HTTP HEAD
 	 * request, that we can retriving the length and filename.
 	 */
-	if (dlinfo_init(dl) && dlinfo_init_without_head(dl)) {
+	if (dlinfo_init_without_head(dl) && dlinfo_init(dl)) {
 		goto out;
 	}
 
