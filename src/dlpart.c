@@ -171,8 +171,13 @@ static int dlpart_launch(struct dlpart *dp)
 {
 	int ret = -1;
 	CURLcode rc;
+	struct curl_slist *chunk = NULL;
 
 	dlpart_curl_setup(dp);
+
+	chunk = curl_slist_append(chunk, CURL_USER_AGENT_DEFAULT);
+	curl_easy_setopt(dp->dp_curl, CURLOPT_HTTPHEADER, chunk);
+
 	if ((rc = curl_easy_perform(dp->dp_curl)) && rc != CURLE_WRITE_ERROR) {
 		err_dbg(2, "curl_easy_perform: %s", curl_easy_strerror(rc));
 		goto out;
@@ -180,6 +185,9 @@ static int dlpart_launch(struct dlpart *dp)
 
 	ret = 0;
 out:
+	if (chunk)
+		curl_slist_free_all(chunk);
+
 	dlpart_write(dp);
 	return ret;
 }

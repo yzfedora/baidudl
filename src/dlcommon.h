@@ -17,6 +17,11 @@
 #define _DLCOMMON_H
 #include "dlinfo.h"
 
+#define CURL_USER_AGENT_DEFAULT \
+	"User-Agent: Mozilla/5.0 (X11; Fedora; Linux x86_64) " \
+	"AppleWebKit/537.36 (KHTML, like Gecko) " \
+	"Chrome/64.0.3282.186 Safari/537.36"
+
 int dlcom_get_http_response_code(char *s);
 int dlcom_url_is_http(const char *url);
 void dlcom_get_filename_from_url(struct dlinfo *dl);

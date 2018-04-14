@@ -183,6 +183,7 @@ static int dlinfo_init_without_head(struct dlinfo *dl)
 	int ret = -1;
 	CURL *curl = NULL;
 	CURLcode rc;
+	struct curl_slist *chunk = NULL;
 
 	dlbuffer_set_offset(dl->di_buffer, 0);
 	if (!dl->di_url_is_http)
@@ -202,6 +203,9 @@ static int dlinfo_init_without_head(struct dlinfo *dl)
 			 dlinfo_http_header_callback);
 	curl_easy_setopt(curl, CURLOPT_WRITEDATA, dl);
 
+	chunk = curl_slist_append(chunk, CURL_USER_AGENT_DEFAULT);
+	curl_easy_setopt(curl, CURLOPT_HTTPHEADER, chunk);
+
 	if ((rc = curl_easy_perform(curl)) && rc != CURLE_WRITE_ERROR) {
 		err_msg("curl_easy_perform: %s", curl_easy_strerror(rc));
 		goto out;;
@@ -212,6 +216,9 @@ static int dlinfo_init_without_head(struct dlinfo *dl)
 
 	ret = 0;
 out:
+	if (chunk)
+		curl_slist_free_all(chunk);
+
 	if (curl)
 		curl_easy_cleanup(curl);
 	return ret;
@@ -222,6 +229,7 @@ static int dlinfo_init(struct dlinfo *dl)
 	int ret = -1;
 	CURL *curl = NULL;
 	CURLcode rc;
+	struct curl_slist *chunk = NULL;
 
 	dlbuffer_set_offset(dl->di_buffer, 0);
 	if (!(curl = curl_easy_init())) {
@@ -234,6 +242,10 @@ static int dlinfo_init(struct dlinfo *dl)
 	curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 0L);
 	curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
 	curl_easy_setopt(curl, CURLOPT_NOBODY, 1L);
+	curl_easy_setopt(curl, CURLOPT_TIMEOUT, 10L);
+
+	chunk = curl_slist_append(chunk, CURL_USER_AGENT_DEFAULT);
+	curl_easy_setopt(curl, CURLOPT_HTTPHEADER, chunk);
 
 	if (dl->di_url_is_http) {
 		/*
@@ -274,6 +286,9 @@ static int dlinfo_init(struct dlinfo *dl)
 
 	ret = 0;
 out:
+	if (chunk)
+		curl_slist_free_all(chunk);
+
 	if (curl)
 		curl_easy_cleanup(curl);
 	return ret;
