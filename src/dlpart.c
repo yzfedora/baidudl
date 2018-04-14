@@ -151,8 +151,8 @@ static int dlpart_curl_setup(struct dlpart *dp)
 	curl_easy_setopt(dp->dp_curl, CURLOPT_RANGE, range);
 	curl_easy_setopt(dp->dp_curl, CURLOPT_URL, dp->dp_info->di_url);
 	curl_easy_setopt(dp->dp_curl, CURLOPT_FOLLOWLOCATION, 1);
-	curl_easy_setopt(dp->dp_curl, CURLOPT_BUFFERSIZE, 1024L);
-	curl_easy_setopt(dp->dp_curl, CURLOPT_TIMEOUT, 10L);
+	curl_easy_setopt(dp->dp_curl, CURLOPT_LOW_SPEED_TIME, 10L);
+	curl_easy_setopt(dp->dp_curl, CURLOPT_LOW_SPEED_LIMIT, 1000L);
 
 	/* do HTTP response code check if the url is HTTP or HTTPS. */
 	if (dp->dp_info->di_url_is_http) {
