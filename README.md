@@ -5,8 +5,7 @@ file from pan.baidu.com.
 OSX, 支持断点续传.
 
 Hello everyone! After fixed the pan.baidu.com refuse wrong User-Agent request
-problem, now we can enjoy the download link based accelerated download experience
-again.
+problem, welcome to enjoy the multi-threading based download acceleration experience.
 
 ![image](https://github.com/yzfedora/baidudl/raw/master/demo.png)
 
@@ -17,31 +16,6 @@ forget to use "-n" option to specify use how many number of threads to
 download, normally, I set it to 100 or 200 according the situation.
 
 
-# Bugs
-1. there is a bug in pan.baidu.com, especially when try specify a batch
-   download url, pan.baidu.com may send broken file data to you. in this
-   situation, you will see some files was broken after you unzip. you can
-   choose to download broken files only, or just remove the download file,
-   and try again.
-2. there still exists an "Illegal Hardware Instruction" bug on Mac OSX, I
-   have tried to find why it failed, but with no luck.
-
-# Next Steps
-1. add CRC32 or MD5 checksum supports, for integrality check.
-2. compile rpm, deb package for different Linux distributions if need.
-3. try fix "Illegal Hardware Instruction" bug on Mac OSX.
-
-# Recently Updates
-1. use libcurl to supports http, https, and ftp multithreading download.
-2. use valentine background for status bar.
-3. use -f option to download from file. -l option is deprecated.
-4. use internal cache mechanism to optimize the IO speed.
-5. change the default threads number to 100.
-6. add underline as indicator to indicates are we recvory the download
-   from previous file or not.
-7. adjust buffer size dynamically supports. all buffers memory will be
-   write to disk for every minute(60 second default).
-   
 # Features
 1. multithreading download, number of threads depending on server.
 2. continues download, supports restore download from a previous file.
