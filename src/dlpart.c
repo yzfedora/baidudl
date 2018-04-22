@@ -35,6 +35,40 @@
 #include "dlbuffer.h"
 
 
+#define BAIDU_ERROR_CHECK
+#if defined(BAIDU_ERROR_CHECK)
+#include <jansson.h>
+
+static int baidu_error_check(const char *buf, size_t bufsz)
+{
+    int ret = -1;
+    json_error_t error;
+    json_t *root = json_loadb(buf, bufsz, 0, &error);
+
+    if (root) {
+        json_t *error_code = json_object_get(root, "error_code");
+        json_t *error_msg = json_object_get(root, "error_msg");
+        int code = -1;
+        const char *msg = NULL;
+
+        if (error_code && (code = json_integer_value(error_code)) &&
+            error_msg && (msg = json_string_value(error_msg))) {
+            err_dbg(1, "Received json error: error_code=%d, error_msg=%s",
+                    code, msg);
+            goto out;
+        }
+    }
+
+    ret = 0;
+out:
+    if (root)
+        json_decref(root);
+
+    return ret;
+}
+#endif
+
+
 /*
  * Continuous download supports:
  * | total_length | nthreads | range 1 | ... | range n |
@@ -122,6 +156,11 @@ static size_t dlpart_write_callback(char *buf,
 	struct dlpart *dp = (struct dlpart *)userdata;
 	struct dlinfo *dl = dp->dp_info;
 	size_t len = size *nitems;
+
+#if defined(BAIDU_ERROR_CHECK)
+    if (baidu_error_check(buf, len) < 0)
+        return 0;
+#endif
 
 	if (!dp->dp_ready)
 		return 0;
