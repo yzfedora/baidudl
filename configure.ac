@@ -17,9 +17,10 @@ AC_PROG_INSTALL
 # FIXME: Replace `main' with a function in `-lpthread':
 AC_CHECK_LIB([pthread], [pthread_create])
 AC_CHECK_LIB([curl], [curl_easy_init])
+AC_CHECK_LIB([jansson], [json_loadb])
 
 # Checks for header files.
-AC_CHECK_HEADERS([fcntl.h limits.h malloc.h netdb.h stdlib.h string.h sys/ioctl.h sys/socket.h sys/time.h unistd.h])
+AC_CHECK_HEADERS([fcntl.h limits.h malloc.h netdb.h stdlib.h string.h sys/ioctl.h sys/socket.h sys/time.h unistd.h jansson.h])
 
 # Checks for typedefs, structures, and compiler characteristics.
 AC_TYPE_OFF_T
