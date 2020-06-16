@@ -30,6 +30,7 @@ of threads to be used for download.
 	$ git clone https://github.com/yzfedora/baidudl.git
 	$ cd baidudl
 	$ ./autogen.sh
+	$ ./configure
 	$ make
 	$ sudo make install
 
