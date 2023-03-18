@@ -3,7 +3,7 @@
 
 AC_PREREQ([2.69])
 AC_INIT([bdpandl], [1.0], [yzfedora@gmail.com])
-AM_INIT_AUTOMAKE
+#AM_INIT_AUTOMAKE
 AC_CONFIG_SRCDIR([src])
 AC_CONFIG_HEADERS([config.h])
 AM_INIT_AUTOMAKE([foreign])
